@@ -63,4 +63,27 @@ The transcriber automatically detects and utilizes the best available hardware:
 - Int8 quantization for better performance
 - Automatic memory cleanup during batch processing
 
+## Development
+
+For development and testing:
+```bash
+pip install -r requirements-dev.txt
+pytest tests/
+```
+
+For coverage reporting:
+```bash
+pytest tests/ --cov=src/
+```
+
+## Future Enhancements
+
+We maintain a comprehensive roadmap of planned features and improvements. See [FUTURE.md](FUTURE.md) for details about upcoming enhancements, including:
+- Batch processing support
+- Real-time transcription
+- GUI interface
+- Cloud integrations
+- Performance optimizations
+- And much more!
+
 See examples/basic_transcription.py for more detailed usage.
