@@ -2,6 +2,14 @@ import sys
 from src.transcriber import Transcriber
 import time
 import argparse
+import os
+
+def get_default_output_path(input_path, transcriber):
+    """Generate default output path based on input filename."""
+    # Get the input filename without extension
+    base_name = os.path.splitext(os.path.basename(input_path))[0]
+    # Create output path in transcripts directory with appropriate extension
+    return os.path.join("transcripts", f"{base_name}.{transcriber.output_format}")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -11,8 +19,7 @@ def main():
     parser.add_argument('input_path', 
                        help='Path to the video or audio file to transcribe')
     parser.add_argument('--output', '-o', 
-                       default="transcripts/output.txt",
-                       help='Output path for the transcript (default: transcripts/output.txt)')
+                       help='Output path for the transcript (default: transcripts/<input_filename>.<format>)')
     
     args = parser.parse_args()
     
@@ -22,8 +29,15 @@ def main():
     print("\nInitializing transcriber...")
     transcriber = Transcriber()
     
+    # Set default output path if not specified
+    if args.output is None:
+        args.output = get_default_output_path(args.input_path, transcriber)
+    
     print(f"\nProcessing {args.input_path}...")
     segments = transcriber.transcribe(args.input_path)
+    
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     
     print(f"\nSaving transcript to {args.output}...")
     transcriber.save_transcript(segments, args.output)
