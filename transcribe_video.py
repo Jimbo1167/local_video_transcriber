@@ -1,13 +1,16 @@
 import sys
-print(sys.path)
-
 from src.transcriber import Transcriber
 import time
+import argparse
 
 def main():
-    # Replace these paths with your video file and desired output location
-    video_path = "path/to/your/video.mp4"  # Example: videos/meeting.mp4
-    output_path = "transcripts/output.txt"  # Example: transcripts/meeting_transcript.txt
+    parser = argparse.ArgumentParser(description='Transcribe a video file with speaker diarization.')
+    parser.add_argument('video_path', help='Path to the video file to transcribe')
+    parser.add_argument('--output', '-o', 
+                       default="transcripts/output.txt",
+                       help='Output path for the transcript (default: transcripts/output.txt)')
+    
+    args = parser.parse_args()
     
     print("\n=== Starting Video Transcription Process ===")
     start_time = time.time()
@@ -15,11 +18,11 @@ def main():
     print("\nInitializing transcriber...")
     transcriber = Transcriber()
     
-    print(f"\nTranscribing {video_path}...")
-    segments = transcriber.transcribe(video_path)
+    print(f"\nTranscribing {args.video_path}...")
+    segments = transcriber.transcribe(args.video_path)
     
-    print(f"\nSaving transcript to {output_path}...")
-    transcriber.save_transcript(segments, output_path)
+    print(f"\nSaving transcript to {args.output}...")
+    transcriber.save_transcript(segments, args.output)
     
     elapsed_time = time.time() - start_time
     print(f"\nDone! Transcript saved.")
