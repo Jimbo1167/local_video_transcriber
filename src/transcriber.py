@@ -100,11 +100,43 @@ class Transcriber:
                 os.remove(audio_path)
             raise
     
-    def transcribe(self, video_path: str) -> List[Tuple[float, float, str, str]]:
-        """Transcribe video file with timeouts and progress monitoring."""
-        # Extract audio
+    def _is_audio_file(self, file_path: str) -> bool:
+        """Check if the file is an audio file based on extension."""
+        return file_path.lower().endswith(('.wav', '.mp3', '.m4a', '.aac'))
+    
+    def _get_audio_path(self, input_path: str) -> Tuple[str, bool]:
+        """Get the audio path and whether it needs cleanup.
+        
+        Returns:
+            Tuple[str, bool]: (audio_path, needs_cleanup)
+            - audio_path: Path to the WAV file
+            - needs_cleanup: True if we created a temporary file that needs cleanup
+        """
+        if self._is_audio_file(input_path):
+            if input_path.lower().endswith('.wav'):
+                return input_path, False
+            else:
+                # Convert non-WAV audio to WAV
+                print("\nConverting audio to WAV format...")
+                wav_path = input_path.rsplit(".", 1)[0] + ".wav"
+                try:
+                    with timeout(self.audio_timeout, "Audio conversion timed out"):
+                        audio = VideoFileClip(input_path)
+                        audio.audio.write_audiofile(wav_path, logger=None)
+                        return wav_path, True
+                except Exception as e:
+                    if os.path.exists(wav_path):
+                        os.remove(wav_path)
+                    raise Exception(f"Error converting audio: {e}")
+        else:
+            # Extract audio from video
+            return self.extract_audio(input_path), True
+    
+    def transcribe(self, input_path: str) -> List[Tuple[float, float, str, str]]:
+        """Transcribe video or audio file with timeouts and progress monitoring."""
         try:
-            audio_path = self.extract_audio(video_path)
+            # Get audio path and whether we need to clean it up
+            audio_path, needs_cleanup = self._get_audio_path(input_path)
             
             print("\nStarting transcription...")
             with timeout(self.transcribe_timeout, "Transcription timed out"):
@@ -119,7 +151,10 @@ class Transcriber:
                 print(f"\nTranscription complete. Found {len(segments)} segments.")
             
             if not self.include_diarization:
-                return [(s.start, s.end, s.text, "") for s in segments]
+                result = [(s.start, s.end, s.text, "") for s in segments]
+                if needs_cleanup:
+                    os.remove(audio_path)
+                return result
             
             # Perform diarization with timeout
             print("\nStarting speaker diarization...")
@@ -155,14 +190,15 @@ class Transcriber:
                 elif self.device == "cuda":
                     torch.cuda.empty_cache()
             
-            # Clean up
-            print("\nCleaning up temporary files...")
-            os.remove(audio_path)
+            # Clean up temporary files
+            if needs_cleanup:
+                print("\nCleaning up temporary files...")
+                os.remove(audio_path)
             
             return result
         except Exception as e:
             print(f"\nError during transcription: {e}")
-            if 'audio_path' in locals() and os.path.exists(audio_path):
+            if 'audio_path' in locals() and needs_cleanup and os.path.exists(audio_path):
                 os.remove(audio_path)
             raise
 

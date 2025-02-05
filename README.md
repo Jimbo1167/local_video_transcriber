@@ -1,9 +1,11 @@
 # Video Transcriber
 
-A Python tool for transcribing videos with speaker diarization. This tool extracts audio from video files, transcribes the speech to text, and identifies different speakers in the conversation.
+A Python tool for transcribing videos and audio files with speaker diarization. This tool processes video or audio files, transcribes the speech to text, and identifies different speakers in the conversation.
 
 ## Features
 
+- Support for both video and audio files
+- Direct WAV file processing (no conversion needed)
 - Video to audio extraction
 - Speech-to-text transcription using Whisper
 - Speaker diarization
@@ -11,10 +13,21 @@ A Python tool for transcribing videos with speaker diarization. This tool extrac
 - Progress tracking and timeout handling
 - Hardware acceleration support (CUDA, MPS)
 
+## Supported Formats
+
+### Input Formats
+- Video: mov, mp4, etc. (any format supported by MoviePy)
+- Audio: wav (direct processing), mp3, m4a, aac (auto-converted to wav)
+
+### Output Formats
+- `txt`: Simple text format with speaker labels
+- `srt`: SubRip subtitle format with timestamps
+- `vtt`: WebVTT format for web video subtitles
+
 ## Requirements
 
 - Python 3.8+
-- FFmpeg (for video processing)
+- FFmpeg (for video/audio processing)
 - PyTorch
 - Other dependencies listed in requirements.txt
 
@@ -55,21 +68,30 @@ Edit the `.env` file to configure:
 
 ## Usage
 
-Basic usage:
+### Basic Usage
+
+Process a video file:
 ```bash
 python transcribe_video.py path/to/your/video.mp4
 ```
 
-Specify output location:
+Process an audio file (WAV files are processed directly):
 ```bash
-python transcribe_video.py path/to/your/video.mp4 -o path/to/output.txt
+python transcribe_video.py path/to/your/audio.wav
 ```
 
-### Output Formats
+### Specify Output Location
 
-- `txt`: Simple text format with speaker labels
-- `srt`: SubRip subtitle format with timestamps
-- `vtt`: WebVTT format for web video subtitles
+```bash
+python transcribe_video.py path/to/your/file.mp4 -o path/to/output.txt
+```
+
+### Resume Partial Processing
+
+If you've already extracted the audio:
+```bash
+python transcribe_video.py path/to/your/audio.wav
+```
 
 ## Development
 
@@ -87,6 +109,7 @@ python -m pytest tests/
 
 - Large video files may require significant memory
 - Some hardware acceleration features require specific hardware/drivers
+- Non-WAV audio files will be converted to WAV before processing
 
 ## Contributing
 
@@ -104,4 +127,4 @@ python -m pytest tests/
 
 - OpenAI's Whisper for transcription
 - Pyannote.audio for speaker diarization
-- MoviePy for video processing
+- MoviePy for video/audio processing

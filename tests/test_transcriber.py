@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import torch
 
 def test_transcriber_initialization(test_transcriber):
     """Test that the transcriber initializes correctly."""
@@ -99,23 +100,50 @@ def test_error_handling(test_transcriber, tmp_path):
 
 def test_device_selection(monkeypatch):
     """Test device selection logic."""
-    # Test MPS (Apple Silicon) selection
+    # Mock device-related functions
     monkeypatch.setattr("torch.backends.mps.is_available", lambda: True)
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
+
+    # Mock the model loading to avoid actual device operations
+    class MockWhisperModel:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class MockPipeline:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            return MockDiarizer()
+
+    class MockDiarizer:
+        def __init__(self):
+            self.device = None
+
+        def to(self, device):
+            self.device = device
+            return self
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+    # Mock the model loading functions
+    monkeypatch.setattr("src.transcriber.WhisperModel", MockWhisperModel)
+    monkeypatch.setattr("pyannote.audio.Pipeline", MockPipeline)
+
+    # Test MPS selection
     transcriber = Transcriber()
-    assert transcriber.device == "mps"
-    
+    assert transcriber._get_device() == "mps"
+
     # Test CUDA selection
     monkeypatch.setattr("torch.backends.mps.is_available", lambda: False)
     monkeypatch.setattr("torch.cuda.is_available", lambda: True)
     transcriber = Transcriber()
-    assert transcriber.device == "cuda"
-    
+    assert transcriber._get_device() == "cuda"
+
     # Test CPU fallback
     monkeypatch.setattr("torch.backends.mps.is_available", lambda: False)
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
     transcriber = Transcriber()
-    assert transcriber.device == "cpu"
+    assert transcriber._get_device() == "cpu"
 
 def test_env_variable_parsing(monkeypatch):
     """Test that environment variables are properly parsed, handling comments and whitespace."""
@@ -134,6 +162,141 @@ def test_env_variable_parsing(monkeypatch):
         transcriber = Transcriber()
         assert transcriber.output_format == expected, \
             f"Failed to parse '{env_value}' correctly. Expected '{expected}' but got '{transcriber.output_format}'"
+
+def test_audio_file_detection(test_transcriber):
+    """Test detection of different audio file types."""
+    assert test_transcriber._is_audio_file("test.wav") is True
+    assert test_transcriber._is_audio_file("test.mp3") is True
+    assert test_transcriber._is_audio_file("test.m4a") is True
+    assert test_transcriber._is_audio_file("test.aac") is True
+    assert test_transcriber._is_audio_file("test.WAV") is True  # Test case insensitivity
+    assert test_transcriber._is_audio_file("test.mp4") is False
+    assert test_transcriber._is_audio_file("test.mov") is False
+    assert test_transcriber._is_audio_file("test.txt") is False
+
+def test_get_audio_path(test_transcriber, tmp_path, monkeypatch):
+    """Test audio path resolution for different input types."""
+    # Mock the entire moviepy module
+    class MockMoviePy:
+        class VideoFileClip:
+            def __init__(self, path):
+                self.path = path
+                self.audio = self
+                self.duration = 10.0
+
+            def write_audiofile(self, path, logger=None):
+                with open(path, 'wb') as f:
+                    f.write(b'RIFF' + b'\x00' * 36 + b'data' + b'\x00' * 4)
+
+            def close(self):
+                pass
+
+    # Create a mock module
+    mock_moviepy = type('moviepy', (), {'VideoFileClip': MockMoviePy.VideoFileClip})
+    monkeypatch.setattr("src.transcriber.VideoFileClip", mock_moviepy.VideoFileClip)
+
+    # Test WAV file (should be used directly)
+    wav_file = tmp_path / "test.wav"
+    with open(wav_file, 'wb') as f:
+        f.write(b'RIFF' + b'\x00' * 36 + b'data' + b'\x00' * 4)
+
+    audio_path, needs_cleanup = test_transcriber._get_audio_path(str(wav_file))
+    assert audio_path == str(wav_file)
+    assert needs_cleanup is False
+
+    # Test MP3 file (should be converted)
+    mp3_file = tmp_path / "test.mp3"
+    with open(mp3_file, 'wb') as f:
+        f.write(b'ID3' + b'\x00' * 100)  # Mock MP3 content
+
+    audio_path, needs_cleanup = test_transcriber._get_audio_path(str(mp3_file))
+    assert audio_path == str(mp3_file).rsplit(".", 1)[0] + ".wav"
+    assert needs_cleanup is True
+    assert os.path.exists(audio_path)
+
+    # Cleanup
+    if os.path.exists(audio_path):
+        os.remove(audio_path)
+
+def test_transcribe_with_different_inputs(test_transcriber, tmp_path, monkeypatch):
+    """Test transcription with different input types."""
+    # Mock dependencies to avoid actual processing
+    class MockWhisperResult:
+        def __init__(self, start, end, text):
+            self.start = start
+            self.end = end
+            self.text = text
+
+    def mock_transcribe(*args, **kwargs):
+        segments = [
+            MockWhisperResult(0, 1, "Test segment one"),
+            MockWhisperResult(1, 2, "Test segment two")
+        ]
+        return segments, None
+
+    class MockVideoFileClip:
+        def __init__(self, path):
+            self.audio = self
+            self.duration = 10.0
+
+        def write_audiofile(self, path, logger=None):
+            with open(path, 'wb') as f:
+                f.write(b'RIFF' + b'\x00' * 36 + b'data' + b'\x00' * 4)
+
+        def close(self):
+            pass
+
+    class MockDiarization:
+        def itertracks(self, yield_label=True):
+            from pyannote.core import Segment
+            yield Segment(0, 1), None, "SPEAKER_1"
+            yield Segment(1, 2), None, "SPEAKER_2"
+
+    class MockDiarizer:
+        def __call__(self, audio_path):
+            return MockDiarization()
+
+        def to(self, device):
+            return self
+
+    monkeypatch.setattr("moviepy.VideoFileClip", MockVideoFileClip)
+    monkeypatch.setattr(test_transcriber.whisper, "transcribe", mock_transcribe)
+    test_transcriber.diarizer = MockDiarizer()
+
+    # Test with WAV file
+    wav_file = tmp_path / "test.wav"
+    with open(wav_file, 'wb') as f:
+        f.write(b'RIFF' + b'\x00' * 36 + b'data' + b'\x00' * 4)
+
+    segments = test_transcriber.transcribe(str(wav_file))
+    assert len(segments) == 2
+    assert segments[0] == (0, 1, "Test segment one", "SPEAKER_1")
+    assert segments[1] == (1, 2, "Test segment two", "SPEAKER_2")
+
+    # Test without diarization
+    test_transcriber.include_diarization = False
+    segments = test_transcriber.transcribe(str(wav_file))
+    assert len(segments) == 2
+    assert segments[0] == (0, 1, "Test segment one", "")
+    assert segments[1] == (1, 2, "Test segment two", "")
+
+def test_error_handling_for_audio_files(test_transcriber, tmp_path):
+    """Test error handling for audio file processing."""
+    # Test with non-existent file
+    with pytest.raises(Exception):
+        test_transcriber.transcribe("nonexistent.wav")
+    
+    # Test with invalid audio file
+    invalid_wav = tmp_path / "invalid.wav"
+    invalid_wav.write_text("not a real wav file")
+    with pytest.raises(Exception):
+        test_transcriber.transcribe(str(invalid_wav))
+    
+    # Test with unsupported audio format
+    unsupported = tmp_path / "test.ogg"
+    unsupported.touch()
+    with pytest.raises(Exception):
+        test_transcriber.transcribe(str(unsupported))
 
 class TestTranscriber(unittest.TestCase):
     def setUp(self):

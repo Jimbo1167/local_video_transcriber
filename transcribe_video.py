@@ -4,22 +4,26 @@ import time
 import argparse
 
 def main():
-    parser = argparse.ArgumentParser(description='Transcribe a video file with speaker diarization.')
-    parser.add_argument('video_path', help='Path to the video file to transcribe')
+    parser = argparse.ArgumentParser(
+        description='Transcribe a video or audio file with speaker diarization. '
+                   'Supports video files (mov, mp4, etc.) and audio files (wav, mp3, m4a, aac).'
+    )
+    parser.add_argument('input_path', 
+                       help='Path to the video or audio file to transcribe')
     parser.add_argument('--output', '-o', 
                        default="transcripts/output.txt",
                        help='Output path for the transcript (default: transcripts/output.txt)')
     
     args = parser.parse_args()
     
-    print("\n=== Starting Video Transcription Process ===")
+    print("\n=== Starting Transcription Process ===")
     start_time = time.time()
     
     print("\nInitializing transcriber...")
     transcriber = Transcriber()
     
-    print(f"\nTranscribing {args.video_path}...")
-    segments = transcriber.transcribe(args.video_path)
+    print(f"\nProcessing {args.input_path}...")
+    segments = transcriber.transcribe(args.input_path)
     
     print(f"\nSaving transcript to {args.output}...")
     transcriber.save_transcript(segments, args.output)
