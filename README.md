@@ -1,31 +1,32 @@
 # Video Transcriber
 
-A Python tool for local video transcription with speaker diarization, optimized for Apple Silicon.
+A Python tool for transcribing videos with speaker diarization. This tool extracts audio from video files, transcribes the speech to text, and identifies different speakers in the conversation.
 
 ## Features
-- Extract audio from video files
-- Transcribe speech to text using Whisper
-- Identify different speakers using pyannote.audio
-- Fully local processing - no cloud services required
-- Optimized for Apple Silicon with MPS acceleration
-- Memory-efficient batch processing for long videos
 
-## Performance
-- **Apple Silicon (M1/M2/M3)**: ~35-50 minutes for a 1-hour video
-  - Uses MPS acceleration for diarization
-  - Optimized CPU processing for Whisper
-  - Efficient memory management
-- **Other Systems**: ~55-80 minutes for a 1-hour video
+- Video to audio extraction
+- Speech-to-text transcription using Whisper
+- Speaker diarization
+- Multiple output formats (txt, srt, vtt)
+- Progress tracking and timeout handling
+- Hardware acceleration support (CUDA, MPS)
+
+## Requirements
+
+- Python 3.8+
+- FFmpeg (for video processing)
+- PyTorch
+- Other dependencies listed in requirements.txt
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/video-transcriber.git
-cd video-transcriber
+git clone https://github.com/yourusername/video_transcriber.git
+cd video_transcriber
 ```
 
-2. Create a virtual environment and activate it:
+2. Create and activate a virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -36,54 +37,71 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Copy .env.example to .env and add your HuggingFace token:
+4. Copy the example environment file and configure your settings:
 ```bash
 cp .env.example .env
 ```
 
+## Configuration
+
+Edit the `.env` file to configure:
+
+- `HF_TOKEN`: Your HuggingFace token for accessing models
+- `WHISPER_MODEL`: Whisper model size (tiny, base, small, medium, large)
+- `LANGUAGE`: Target language for transcription (default: en)
+- `OUTPUT_FORMAT`: Transcript format (txt, srt, vtt)
+- `INCLUDE_DIARIZATION`: Enable/disable speaker diarization
+- Various timeout settings
+
 ## Usage
 
-Basic transcription:
-```python
-from src.transcriber import Transcriber
-
-transcriber = Transcriber()
-segments = transcriber.transcribe("path/to/video.mp4")
-
-for start, end, text, speaker in segments:
-    print(f"[{speaker}] [{start:.2f}s -> {end:.2f}s] {text}")
+Basic usage:
+```bash
+python transcribe_video.py path/to/your/video.mp4
 ```
 
-## Optimization Details
+Specify output location:
+```bash
+python transcribe_video.py path/to/your/video.mp4 -o path/to/output.txt
+```
 
-The transcriber automatically detects and utilizes the best available hardware:
-- On Apple Silicon: Uses MPS (Metal Performance Shaders) for diarization and optimized CPU processing for Whisper
-- Memory-efficient batch processing (50 segments at a time)
-- Voice Activity Detection (VAD) for improved accuracy and speed
-- Int8 quantization for better performance
-- Automatic memory cleanup during batch processing
+### Output Formats
+
+- `txt`: Simple text format with speaker labels
+- `srt`: SubRip subtitle format with timestamps
+- `vtt`: WebVTT format for web video subtitles
 
 ## Development
 
-For development and testing:
+For development work, install additional dependencies:
 ```bash
 pip install -r requirements-dev.txt
-pytest tests/
 ```
 
-For coverage reporting:
+Run tests:
 ```bash
-pytest tests/ --cov=src/
+python -m pytest tests/
 ```
 
-## Future Enhancements
+## Known Issues
 
-We maintain a comprehensive roadmap of planned features and improvements. See [FUTURE.md](FUTURE.md) for details about upcoming enhancements, including:
-- Batch processing support
-- Real-time transcription
-- GUI interface
-- Cloud integrations
-- Performance optimizations
-- And much more!
+- Large video files may require significant memory
+- Some hardware acceleration features require specific hardware/drivers
 
-See examples/basic_transcription.py for more detailed usage.
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request
+
+## License
+
+[Your chosen license]
+
+## Acknowledgments
+
+- OpenAI's Whisper for transcription
+- Pyannote.audio for speaker diarization
+- MoviePy for video processing
