@@ -54,3 +54,9 @@ models/
 .pytest_cache/
 .env
 .DS_Store
+# Virtual environment
+.venv/
+
+# Output files
+transcripts/
+
