@@ -12,6 +12,7 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - Multiple output formats (txt, srt, vtt)
 - Progress tracking and timeout handling
 - Hardware acceleration support (CUDA, MPS)
+- Optimized parameters for different model sizes
 
 ## Supported Formats
 
@@ -23,6 +24,37 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - `txt`: Simple text format with speaker labels
 - `srt`: SubRip subtitle format with timestamps
 - `vtt`: WebVTT format for web video subtitles
+
+## Whisper Models
+
+The system supports different Whisper model sizes, each with its own trade-offs:
+
+| Model | Size | Memory | Speed | Accuracy | Use Case |
+|-------|------|---------|--------|-----------|-----------|
+| tiny | ~75MB | Minimal | Fastest | Basic | Quick tests, simple audio |
+| base | ~150MB | Low | Fast | Good | General use, clear audio |
+| small | ~500MB | Medium | Moderate | Better | Professional use |
+| medium | ~1.5GB | High | Slower | Very Good | Complex audio |
+| large-v3 | ~3GB | Very High | Slowest | Best | Critical accuracy needs |
+
+### Model-Specific Optimizations
+
+- **Base Model**: Optimized for general use with balanced parameters
+  - Default VAD settings
+  - Standard beam size (5)
+  - Good for most use cases
+
+- **Medium/Large Models**: Enhanced parameters for better accuracy
+  - Increased beam size (6)
+  - Adjusted VAD parameters for better word boundary detection
+  - Added speech padding to prevent word cutting
+  - Context-aware processing with previous text conditioning
+  - Optimized for conversation transcription
+
+Choose your model in the `.env` file:
+```bash
+WHISPER_MODEL=base  # Options: tiny, base, small, medium, large-v3
+```
 
 ## Requirements
 
@@ -39,18 +71,18 @@ git clone https://github.com/yourusername/video_transcriber.git
 cd video_transcriber
 ```
 
-2. Create and activate a virtual environment:
+2. Set up the environment and install dependencies:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+make setup  # Creates venv and installs all dependencies
 ```
+   Or manually:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Copy the example environment file and configure your settings:
+3. Copy the example environment file and configure your settings:
 ```bash
 cp .env.example .env
 ```
@@ -95,13 +127,24 @@ python transcribe_video.py path/to/your/audio.wav
 
 ## Development
 
-For development work, install additional dependencies:
+### Using Make Commands
+
+The project includes several make commands to simplify common operations:
+
 ```bash
-pip install -r requirements-dev.txt
+make help     # Show all available commands
+make setup    # Create virtual environment and install dependencies
+make venv     # Create virtual environment only
+make install  # Install dependencies into existing virtual environment
+make test     # Run tests
+make clean    # Remove Python cache files and temporary files
 ```
 
-Run tests:
+### Manual Development Setup
+
+For development work without using Make:
 ```bash
+pip install -r requirements-dev.txt
 python -m pytest tests/
 ```
 
