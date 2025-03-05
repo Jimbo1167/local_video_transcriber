@@ -1,5 +1,5 @@
 import sys
-from src.transcriber import Transcriber
+from src.transcriber import Transcriber, Config
 import time
 import argparse
 import os
@@ -27,7 +27,8 @@ def main():
     start_time = time.time()
     
     print("\nInitializing transcriber...")
-    transcriber = Transcriber()
+    config = Config(".env")  # Explicitly load from .env file
+    transcriber = Transcriber(config)
     
     # Set default output path if not specified
     if args.output is None:
