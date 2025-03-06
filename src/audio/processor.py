@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import Tuple, Optional, Generator
+from typing import Tuple, Optional, Generator, Iterator
 import numpy as np
 from moviepy.editor import VideoFileClip
 from moviepy.audio.io.AudioFileClip import AudioFileClip
@@ -227,4 +227,65 @@ class AudioProcessor:
         
         # Process in chunks
         for i in range(0, len(audio_data), chunk_samples):
-            yield audio_data[i:i+chunk_samples] 
+            yield audio_data[i:i+chunk_samples]
+    
+    def stream_audio_from_file(self, audio_path: str, chunk_duration: float = 5.0, 
+                              target_sr: int = 16000) -> Iterator[np.ndarray]:
+        """Stream audio from a file in chunks.
+        
+        Args:
+            audio_path: Path to the audio file
+            chunk_duration: Duration of each chunk in seconds
+            target_sr: Target sample rate
+            
+        Yields:
+            Chunks of audio data as numpy arrays
+        """
+        logger.info(f"Streaming audio from file: {audio_path}")
+        try:
+            import librosa
+            import soundfile as sf
+            
+            # Get audio info without loading the entire file
+            info = sf.info(audio_path)
+            total_duration = info.duration
+            sample_rate = info.samplerate
+            
+            # Calculate chunk size in frames
+            chunk_size = int(chunk_duration * sample_rate)
+            
+            logger.info(f"Audio file: {total_duration:.1f} seconds at {sample_rate}Hz")
+            logger.info(f"Streaming in chunks of {chunk_duration:.1f} seconds")
+            
+            # Stream the audio in chunks
+            with sf.SoundFile(audio_path) as sf_file:
+                # Resample if needed
+                resampling_ratio = target_sr / sample_rate if sample_rate != target_sr else 1.0
+                
+                while sf_file.tell() < sf_file.frames:
+                    # Read a chunk
+                    chunk = sf_file.read(chunk_size)
+                    
+                    # Convert to float32 if needed
+                    if chunk.dtype != np.float32:
+                        chunk = chunk.astype(np.float32)
+                    
+                    # If stereo, convert to mono
+                    if len(chunk.shape) > 1 and chunk.shape[1] > 1:
+                        chunk = np.mean(chunk, axis=1)
+                    
+                    # Resample if needed
+                    if resampling_ratio != 1.0:
+                        chunk = librosa.resample(
+                            chunk, 
+                            orig_sr=sample_rate, 
+                            target_sr=target_sr
+                        )
+                    
+                    yield chunk
+                    
+            logger.info(f"Finished streaming audio from {audio_path}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming audio: {e}")
+            raise 

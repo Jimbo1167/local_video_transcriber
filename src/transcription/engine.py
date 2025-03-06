@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Iterator, Generator
 import concurrent.futures
 from contextlib import contextmanager
 import threading
@@ -13,6 +13,7 @@ import numpy as np
 from ..config import Config
 from ..audio.processor import timeout, TimeoutException
 from ..cache.manager import CacheManager
+from .streaming import StreamingTranscriber, AsyncStreamingTranscriber
 
 logger = logging.getLogger(__name__)
 
@@ -196,4 +197,73 @@ class TranscriptionEngine:
                 time.sleep(5)
             
             # Get the result or raise the exception
-            return future.result() 
+            return future.result()
+    
+    def transcribe_stream(self, audio_stream: Iterator[np.ndarray]) -> Generator[Dict[str, Any], None, None]:
+        """
+        Transcribe an audio stream and yield segments as they become available.
+        
+        Args:
+            audio_stream: Iterator yielding chunks of audio data as numpy arrays
+            
+        Yields:
+            Transcription segments as they become available
+            
+        Raises:
+            Exception: If transcription fails
+        """
+        if not self.whisper:
+            logger.warning("Whisper model not initialized, attempting to load model")
+            self._load_model()
+            if not self.whisper:
+                logger.error("Failed to load Whisper model")
+                raise Exception("Failed to load Whisper model")
+        
+        logger.info("Starting streaming transcription")
+        start_time = time.time()
+        
+        try:
+            streaming_transcriber = StreamingTranscriber(self.whisper, self.config)
+            segment_count = 0
+            
+            for segment in streaming_transcriber.process_stream(audio_stream):
+                segment_count += 1
+                yield segment
+                
+            elapsed = time.time() - start_time
+            logger.info(f"Streaming transcription completed in {elapsed:.1f} seconds, found {segment_count} segments")
+                
+        except Exception as e:
+            logger.error(f"Error during streaming transcription: {str(e)}")
+            raise Exception(f"Error during streaming transcription: {str(e)}")
+    
+    def start_async_transcription(self, audio_stream: Iterator[np.ndarray]) -> AsyncStreamingTranscriber:
+        """
+        Start asynchronous transcription of an audio stream.
+        
+        Args:
+            audio_stream: Iterator yielding chunks of audio data as numpy arrays
+            
+        Returns:
+            AsyncStreamingTranscriber instance that can be used to get results
+            
+        Raises:
+            Exception: If transcription fails to start
+        """
+        if not self.whisper:
+            logger.warning("Whisper model not initialized, attempting to load model")
+            self._load_model()
+            if not self.whisper:
+                logger.error("Failed to load Whisper model")
+                raise Exception("Failed to load Whisper model")
+        
+        logger.info("Starting asynchronous streaming transcription")
+        
+        try:
+            async_transcriber = AsyncStreamingTranscriber(self.whisper, self.config)
+            async_transcriber.start_processing(audio_stream)
+            return async_transcriber
+                
+        except Exception as e:
+            logger.error(f"Error starting async transcription: {str(e)}")
+            raise Exception(f"Error starting async transcription: {str(e)}") 

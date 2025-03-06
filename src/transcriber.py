@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import List, Tuple, Dict, Any, Optional, Union
+from typing import List, Tuple, Dict, Any, Optional, Union, Generator, Iterator
 import concurrent.futures
 import warnings
 
@@ -231,4 +231,113 @@ class Transcriber:
         """
         # Set the output format in the formatter
         self.output_formatter.format = self.output_format
-        self.output_formatter.save_transcript(segments, output_path) 
+        self.output_formatter.save_transcript(segments, output_path)
+    
+    def transcribe_stream(self, input_path: str) -> Generator[Dict[str, Any], None, None]:
+        """
+        Transcribe an audio or video file using streaming to reduce memory usage.
+        
+        Args:
+            input_path: Path to the audio or video file
+            
+        Yields:
+            Transcription segments as they become available
+            
+        Raises:
+            Exception: If transcription fails
+        """
+        logger.info(f"Starting streaming transcription for {input_path}")
+        start_time = time.time()
+        
+        try:
+            # Get the audio path
+            audio_path, needs_cleanup = self.audio_processor.get_audio_path(input_path)
+            
+            # Stream audio from the file
+            audio_stream = self.audio_processor.stream_audio_from_file(audio_path)
+            
+            # Transcribe the audio stream
+            for segment in self.transcription_engine.transcribe_stream(audio_stream):
+                # For now, we don't include diarization in streaming mode
+                # as it requires the full audio file
+                yield segment
+            
+            # Clean up temporary files if needed
+            if needs_cleanup and os.path.exists(audio_path):
+                os.remove(audio_path)
+                logger.info(f"Removed temporary audio file: {audio_path}")
+            
+            elapsed = time.time() - start_time
+            logger.info(f"Streaming transcription completed in {elapsed:.1f} seconds")
+            
+        except Exception as e:
+            logger.error(f"Error during streaming transcription: {str(e)}")
+            raise
+    
+    def transcribe_stream_with_diarization(self, input_path: str) -> Generator[Dict[str, Any], None, None]:
+        """
+        Transcribe an audio or video file using streaming with diarization.
+        This method first performs diarization on the entire file, then streams the transcription.
+        
+        Args:
+            input_path: Path to the audio or video file
+            
+        Yields:
+            Transcription segments with speaker information as they become available
+            
+        Raises:
+            Exception: If transcription or diarization fails
+        """
+        logger.info(f"Starting streaming transcription with diarization for {input_path}")
+        start_time = time.time()
+        
+        try:
+            # Get the audio path
+            audio_path, needs_cleanup = self.audio_processor.get_audio_path(input_path)
+            
+            # First, perform diarization on the entire file
+            if self.include_diarization:
+                logger.info("Performing diarization before streaming transcription")
+                diarization_segments = self.diarization_engine.diarize(audio_path)
+            else:
+                diarization_segments = None
+            
+            # Stream audio from the file
+            audio_stream = self.audio_processor.stream_audio_from_file(audio_path)
+            
+            # Keep track of all segments to combine with speakers later
+            all_segments = []
+            
+            # Transcribe the audio stream
+            for segment in self.transcription_engine.transcribe_stream(audio_stream):
+                all_segments.append(segment)
+                
+                # For streaming output, we'll yield the segment without speaker info first
+                # and update it later when all segments are available
+                yield segment
+            
+            # If diarization was performed, combine with transcription
+            if diarization_segments:
+                logger.info("Combining transcription segments with speaker information")
+                combined_segments = self._combine_segments_with_speakers(all_segments, diarization_segments)
+                
+                # Yield the updated segments with speaker information
+                for segment in combined_segments:
+                    yield {
+                        "start": segment[0],
+                        "end": segment[1],
+                        "text": segment[2],
+                        "speaker": segment[3]
+                    }
+            
+            # Clean up temporary files if needed
+            if needs_cleanup and os.path.exists(audio_path):
+                os.remove(audio_path)
+                logger.info(f"Removed temporary audio file: {audio_path}")
+            
+            elapsed = time.time() - start_time
+            logger.info(f"Streaming transcription with diarization completed in {elapsed:.1f} seconds")
+            
+        except Exception as e:
+            logger.error(f"Error during streaming transcription with diarization: {str(e)}")
+            raise 

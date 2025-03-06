@@ -15,6 +15,10 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - Optimized parameters for different model sizes
 - **NEW: Modular architecture for better maintainability**
 - **NEW: Caching system for improved performance**
+- **Streaming Transcription**: Process large files with minimal memory usage
+- **Speaker Diarization**: Identify different speakers in the audio
+- **Multiple Output Formats**: Support for TXT, SRT, VTT, and JSON formats
+- **Configurable**: Extensive configuration options via environment variables or .env file
 
 ## Architecture
 
@@ -161,6 +165,34 @@ Process an audio file (WAV files are processed directly):
 python -m scripts.transcribe_video path/to/your/audio.wav
 ```
 
+### Streaming Transcription (Low Memory Usage)
+
+For large files or systems with limited memory, use the streaming transcription:
+
+```bash
+python -m scripts.stream_transcribe path/to/video.mp4
+```
+
+This processes the audio in chunks, significantly reducing memory usage.
+
+### With Speaker Diarization
+
+```bash
+python -m scripts.transcribe_video path/to/video.mp4 --diarize
+```
+
+Or with streaming:
+
+```bash
+python -m scripts.stream_transcribe path/to/video.mp4 --diarize
+```
+
+### Specify Output Format
+
+```bash
+python -m scripts.transcribe_video path/to/video.mp4 --format srt
+```
+
 ### Specify Output Location
 
 ```bash
@@ -199,6 +231,7 @@ python -m pytest tests/
 
 ## Performance Considerations
 
+- **Streaming Mode**: Use streaming transcription for large files to reduce memory usage
 - **Caching**: Enable caching for improved performance when processing the same files multiple times
 - **Model Selection**: Choose the appropriate model size based on your accuracy needs and hardware capabilities
 - **Hardware Acceleration**: Use CUDA (NVIDIA) or MPS (Apple Silicon) for faster processing
