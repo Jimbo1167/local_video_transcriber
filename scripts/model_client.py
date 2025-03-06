@@ -51,8 +51,6 @@ def transcribe_file(server_url, file_path, options=None):
     progress = ProgressReporter(
         desc=f"Uploading {os.path.basename(file_path)}",
         unit="B",
-        unit_scale=True,
-        unit_divisor=1024,
         color="green"
     )
     
