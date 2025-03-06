@@ -13,6 +13,52 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - Progress tracking and timeout handling
 - Hardware acceleration support (CUDA, MPS)
 - Optimized parameters for different model sizes
+- **NEW: Modular architecture for better maintainability**
+- **NEW: Caching system for improved performance**
+
+## Architecture
+
+The project has been restructured into a modular architecture:
+
+```
+video_transcriber/
+├── src/
+│   ├── audio/         # Audio processing components
+│   ├── transcription/ # Transcription engine
+│   ├── diarization/   # Speaker diarization
+│   ├── output/        # Output formatting
+│   ├── cache/         # Caching system
+│   ├── config.py      # Configuration handling
+│   ├── transcriber.py # Main orchestrator
+├── tests/
+│   ├── unit/          # Unit tests
+│   ├── integration/   # Integration tests
+│   ├── fixtures/      # Test fixtures
+```
+
+### Key Components
+
+- **AudioProcessor**: Handles audio extraction and processing
+- **TranscriptionEngine**: Manages speech-to-text transcription
+- **DiarizationEngine**: Handles speaker identification
+- **OutputFormatter**: Formats transcripts in various output formats
+- **CacheManager**: Manages caching of audio, transcription, and diarization results
+
+## Caching System
+
+The new caching system improves performance by:
+
+- Caching extracted audio files to avoid repeated extraction
+- Caching transcription results for previously processed files
+- Caching diarization results for previously processed files
+- Automatically managing cache expiration and size limits
+
+Configure caching in the `.env` file:
+```bash
+CACHE_ENABLED=true       # Enable/disable caching
+CACHE_EXPIRATION=604800  # Cache expiration in seconds (default: 7 days)
+MAX_CACHE_SIZE=10737418240  # Maximum cache size in bytes (default: 10GB)
+```
 
 ## Supported Formats
 
@@ -96,6 +142,9 @@ Edit the `.env` file to configure:
 - `LANGUAGE`: Target language for transcription (default: en)
 - `OUTPUT_FORMAT`: Transcript format (txt, srt, vtt)
 - `INCLUDE_DIARIZATION`: Enable/disable speaker diarization
+- `CACHE_ENABLED`: Enable/disable caching system
+- `CACHE_EXPIRATION`: Cache expiration time in seconds
+- `MAX_CACHE_SIZE`: Maximum cache size in bytes
 - Various timeout settings
 
 ## Usage
@@ -104,25 +153,25 @@ Edit the `.env` file to configure:
 
 Process a video file:
 ```bash
-python transcribe_video.py path/to/your/video.mp4
+python -m scripts.transcribe_video path/to/your/video.mp4
 ```
 
 Process an audio file (WAV files are processed directly):
 ```bash
-python transcribe_video.py path/to/your/audio.wav
+python -m scripts.transcribe_video path/to/your/audio.wav
 ```
 
 ### Specify Output Location
 
 ```bash
-python transcribe_video.py path/to/your/file.mp4 -o path/to/output.txt
+python -m scripts.transcribe_video path/to/your/file.mp4 -o path/to/output.txt
 ```
 
 ### Resume Partial Processing
 
 If you've already extracted the audio:
 ```bash
-python transcribe_video.py path/to/your/audio.wav
+python -m scripts.transcribe_video path/to/your/audio.wav
 ```
 
 ## Development
@@ -148,11 +197,22 @@ pip install -r requirements-dev.txt
 python -m pytest tests/
 ```
 
+## Performance Considerations
+
+- **Caching**: Enable caching for improved performance when processing the same files multiple times
+- **Model Selection**: Choose the appropriate model size based on your accuracy needs and hardware capabilities
+- **Hardware Acceleration**: Use CUDA (NVIDIA) or MPS (Apple Silicon) for faster processing
+- **Memory Usage**: Large files may require significant memory, especially with larger models
+
 ## Known Issues
 
 - Large video files may require significant memory
 - Some hardware acceleration features require specific hardware/drivers
 - Non-WAV audio files will be converted to WAV before processing
+- You may see warnings about pyannote.audio and PyTorch version mismatches. Options to address this:
+  - Use a newer diarization model: Set `DIARIZATION_MODEL=pyannote/speaker-diarization@2.1.1` in your `.env` file
+  - Downgrade libraries: `pip install pyannote.audio==0.0.1 torch==1.10.0`
+  - Ignore the warnings if diarization is working correctly
 
 ## Contributing
 
