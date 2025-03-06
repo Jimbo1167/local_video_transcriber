@@ -114,7 +114,7 @@ The Video Transcriber can be configured using environment variables or a `.env` 
 Using the unified CLI:
 
 ```bash
-./scripts/transcribe.py transcribe path/to/your/video.mp4
+python -m scripts.transcribe transcribe path/to/your/video.mp4
 ```
 
 This will transcribe the file using the default settings and save the transcript to the `transcripts` directory.
@@ -122,26 +122,26 @@ This will transcribe the file using the default settings and save the transcript
 ### Specifying Output Format
 
 ```bash
-./scripts/transcribe.py transcribe path/to/your/video.mp4 --format srt
+python -m scripts.transcribe transcribe path/to/your/video.mp4 --format srt
 ```
 
 ### Specifying Output Location
 
 ```bash
-./scripts/transcribe.py transcribe path/to/your/video.mp4 --output path/to/output.txt
+python -m scripts.transcribe transcribe path/to/your/video.mp4 --output path/to/output.txt
 ```
 
 ### Enabling/Disabling Speaker Diarization
 
 ```bash
-./scripts/transcribe.py transcribe path/to/your/video.mp4 --diarize  # Enable diarization
-./scripts/transcribe.py transcribe path/to/your/video.mp4 --no-diarize  # Disable diarization
+python -m scripts.transcribe transcribe path/to/your/video.mp4 --diarize  # Enable diarization
+python -m scripts.transcribe transcribe path/to/your/video.mp4 --no-diarize  # Disable diarization
 ```
 
 ### Selecting a Different Whisper Model
 
 ```bash
-./scripts/transcribe.py transcribe path/to/your/video.mp4 --model medium
+python -m scripts.transcribe transcribe path/to/your/video.mp4 --model medium
 ```
 
 ## Advanced Usage
@@ -151,7 +151,7 @@ This will transcribe the file using the default settings and save the transcript
 For large files or systems with limited memory, use the streaming transcription:
 
 ```bash
-./scripts/transcribe.py stream path/to/video.mp4
+python -m scripts.transcribe stream path/to/video.mp4
 ```
 
 This processes the audio in chunks, significantly reducing memory usage.
@@ -161,13 +161,13 @@ This processes the audio in chunks, significantly reducing memory usage.
 Process multiple files at once:
 
 ```bash
-./scripts/transcribe.py batch path/to/directory/*.mp4
+python -m scripts.transcribe batch path/to/directory/*.mp4
 ```
 
 Or specify an output directory:
 
 ```bash
-./scripts/transcribe.py batch path/to/directory/*.mp4 --output-dir path/to/output
+python -m scripts.transcribe batch path/to/directory/*.mp4 --output-dir path/to/output
 ```
 
 ### Using the Model Server
@@ -175,19 +175,19 @@ Or specify an output directory:
 Start the model server:
 
 ```bash
-./scripts/model_server.py start
+python -m scripts.model_server
 ```
 
 Check the server status:
 
 ```bash
-./scripts/model_client.py status
+python -m scripts.model_client status
 ```
 
 Transcribe a file using the server:
 
 ```bash
-./scripts/model_client.py transcribe path/to/your/video.mp4
+python -m scripts.model_client transcribe path/to/your/video.mp4
 ```
 
 ## Command Line Interface

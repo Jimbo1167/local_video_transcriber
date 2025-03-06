@@ -211,7 +211,8 @@ def run_server(host: str, port: int):
     httpd = ThreadedHTTPServer(server_address, ModelRequestHandler)
     
     logger.info(f"Starting model server on {host}:{port}")
-    logger.info(f"Model: {config.whisper_model_size}, Device: {config.device}")
+    device = "CPU" if config.force_cpu else "GPU (if available)"
+    logger.info(f"Model: {config.whisper_model_size}, Device: {device}")
     logger.info("Press Ctrl+C to stop the server")
     
     try:

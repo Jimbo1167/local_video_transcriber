@@ -17,6 +17,10 @@ The Video Transcriber provides several command-line scripts for different use ca
 
 The `transcribe.py` script provides a unified interface with subcommands for different transcription modes.
 
+```bash
+python -m scripts.transcribe [OPTIONS] COMMAND [ARGS]...
+```
+
 ### Global Options
 
 - `--help`: Show help message and exit
@@ -27,7 +31,7 @@ The `transcribe.py` script provides a unified interface with subcommands for dif
 The `transcribe` command processes a single video or audio file.
 
 ```bash
-./scripts/transcribe.py transcribe [OPTIONS] INPUT_PATH
+python -m scripts.transcribe transcribe [OPTIONS] INPUT_PATH
 ```
 
 #### Options
@@ -43,22 +47,22 @@ The `transcribe` command processes a single video or audio file.
 
 Basic transcription:
 ```bash
-./scripts/transcribe.py transcribe path/to/video.mp4
+python -m scripts.transcribe transcribe path/to/video.mp4
 ```
 
 Specify output format and location:
 ```bash
-./scripts/transcribe.py transcribe path/to/video.mp4 -f srt -o path/to/output.srt
+python -m scripts.transcribe transcribe path/to/video.mp4 -f srt -o path/to/output.srt
 ```
 
 Disable speaker diarization:
 ```bash
-./scripts/transcribe.py transcribe path/to/video.mp4 --no-diarize
+python -m scripts.transcribe transcribe path/to/video.mp4 --no-diarize
 ```
 
 Use a different model:
 ```bash
-./scripts/transcribe.py transcribe path/to/video.mp4 -m medium
+python -m scripts.transcribe transcribe path/to/video.mp4 -m medium
 ```
 
 ### Stream Command
@@ -66,7 +70,7 @@ Use a different model:
 The `stream` command processes a file in streaming mode to reduce memory usage.
 
 ```bash
-./scripts/transcribe.py stream [OPTIONS] INPUT_PATH
+python -m scripts.transcribe stream [OPTIONS] INPUT_PATH
 ```
 
 #### Options
@@ -77,12 +81,12 @@ Same as the `transcribe` command.
 
 Basic streaming transcription:
 ```bash
-./scripts/transcribe.py stream path/to/video.mp4
+python -m scripts.transcribe stream path/to/video.mp4
 ```
 
 Streaming with specific options:
 ```bash
-./scripts/transcribe.py stream path/to/video.mp4 -f vtt -m small --no-diarize
+python -m scripts.transcribe stream path/to/video.mp4 -f vtt -m small --no-diarize
 ```
 
 ### Batch Command
@@ -90,7 +94,7 @@ Streaming with specific options:
 The `batch` command processes multiple files in batch.
 
 ```bash
-./scripts/transcribe.py batch [OPTIONS] INPUT_PATHS...
+python -m scripts.transcribe batch [OPTIONS] INPUT_PATHS...
 ```
 
 #### Options
@@ -107,22 +111,22 @@ The `batch` command processes multiple files in batch.
 
 Process multiple files:
 ```bash
-./scripts/transcribe.py batch path/to/video1.mp4 path/to/video2.mp4
+python -m scripts.transcribe batch path/to/video1.mp4 path/to/video2.mp4
 ```
 
 Process all MP4 files in a directory:
 ```bash
-./scripts/transcribe.py batch path/to/directory/*.mp4
+python -m scripts.transcribe batch path/to/directory/*.mp4
 ```
 
 Specify output directory and format:
 ```bash
-./scripts/transcribe.py batch path/to/directory/*.mp4 -o path/to/output -f srt
+python -m scripts.transcribe batch path/to/directory/*.mp4 -o path/to/output -f srt
 ```
 
 Limit the number of worker processes:
 ```bash
-./scripts/transcribe.py batch path/to/directory/*.mp4 -w 2
+python -m scripts.transcribe batch path/to/directory/*.mp4 -w 2
 ```
 
 ## Model Server: `model_server.py`
@@ -130,66 +134,32 @@ Limit the number of worker processes:
 The `model_server.py` script runs a persistent model server for faster processing.
 
 ```bash
-./scripts/model_server.py [OPTIONS] COMMAND [ARGS]...
+python -m scripts.model_server [OPTIONS]
 ```
 
-### Commands
-
-- `start`: Start the model server
-- `stop`: Stop the model server
-- `restart`: Restart the model server
-- `status`: Check the server status
-
-### Start Command
-
-```bash
-./scripts/model_server.py start [OPTIONS]
-```
-
-#### Options
+### Options
 
 - `--host TEXT`: Host to bind the server (default: localhost)
-- `--port INTEGER`: Port to bind the server (default: 5000)
-- `--model [tiny|base|small|medium|large-v3]`: Whisper model size (default: base)
-- `--diarize / --no-diarize`: Enable/disable speaker diarization (default: enabled)
-- `--daemon / --no-daemon`: Run as a daemon process (default: no-daemon)
+- `--port, -p INTEGER`: Port to bind the server (default: 8000)
+- `--config, -c TEXT`: Path to configuration file (default: .env)
+- `--verbose, -v`: Enable verbose logging
 - `--help`: Show help message and exit
 
-#### Examples
+### Examples
 
 Start the server with default settings:
 ```bash
-./scripts/model_server.py start
+python -m scripts.model_server
 ```
 
-Start the server with a specific model and port:
+Start the server with a specific port:
 ```bash
-./scripts/model_server.py start --model medium --port 5001
+python -m scripts.model_server --port 5001
 ```
 
-Start the server as a daemon process:
+Start the server with verbose logging:
 ```bash
-./scripts/model_server.py start --daemon
-```
-
-### Stop Command
-
-```bash
-./scripts/model_server.py stop
-```
-
-### Restart Command
-
-```bash
-./scripts/model_server.py restart [OPTIONS]
-```
-
-Options are the same as the `start` command.
-
-### Status Command
-
-```bash
-./scripts/model_server.py status
+python -m scripts.model_server --verbose
 ```
 
 ## Model Client: `model_client.py`
@@ -197,7 +167,7 @@ Options are the same as the `start` command.
 The `model_client.py` script interacts with the model server.
 
 ```bash
-./scripts/model_client.py [OPTIONS] COMMAND [ARGS]...
+python -m scripts.model_client [OPTIONS] COMMAND [ARGS]...
 ```
 
 ### Commands
@@ -208,35 +178,35 @@ The `model_client.py` script interacts with the model server.
 ### Status Command
 
 ```bash
-./scripts/model_client.py status [OPTIONS]
+python -m scripts.model_client status [OPTIONS]
 ```
 
 #### Options
 
-- `--server-url TEXT`: URL of the model server (default: http://localhost:5000)
+- `--server-url TEXT`: URL of the model server (default: http://localhost:8000)
 - `--help`: Show help message and exit
 
 #### Examples
 
 Check the status of the default server:
 ```bash
-./scripts/model_client.py status
+python -m scripts.model_client status
 ```
 
 Check the status of a specific server:
 ```bash
-./scripts/model_client.py status --server-url http://example.com:5000
+python -m scripts.model_client status --server-url http://example.com:8000
 ```
 
 ### Transcribe Command
 
 ```bash
-./scripts/model_client.py transcribe [OPTIONS] INPUT_PATH
+python -m scripts.model_client transcribe [OPTIONS] INPUT_PATH
 ```
 
 #### Options
 
-- `--server-url TEXT`: URL of the model server (default: http://localhost:5000)
+- `--server-url TEXT`: URL of the model server (default: http://localhost:8000)
 - `--output, -o TEXT`: Output file path
 - `--format, -f [txt|srt|vtt|json]`: Output format (default: txt)
 - `--language, -l TEXT`: Language code (default: en)
@@ -247,17 +217,17 @@ Check the status of a specific server:
 
 Transcribe a file using the default server:
 ```bash
-./scripts/model_client.py transcribe path/to/video.mp4
+python -m scripts.model_client transcribe path/to/video.mp4
 ```
 
 Specify output format and location:
 ```bash
-./scripts/model_client.py transcribe path/to/video.mp4 -f srt -o path/to/output.srt
+python -m scripts.model_client transcribe path/to/video.mp4 -f srt -o path/to/output.srt
 ```
 
 Use a specific server:
 ```bash
-./scripts/model_client.py transcribe path/to/video.mp4 --server-url http://example.com:5000
+python -m scripts.model_client transcribe path/to/video.mp4 --server-url http://example.com:8000
 ```
 
 ## Batch Transcription: `batch_transcribe.py`
@@ -265,7 +235,7 @@ Use a specific server:
 The `batch_transcribe.py` script processes multiple files in batch.
 
 ```bash
-./scripts/batch_transcribe.py [OPTIONS] INPUT_PATHS...
+python -m scripts.batch_transcribe [OPTIONS] INPUT_PATHS...
 ```
 
 ### Options
@@ -282,17 +252,17 @@ The `batch_transcribe.py` script processes multiple files in batch.
 
 Process multiple files:
 ```bash
-./scripts/batch_transcribe.py path/to/video1.mp4 path/to/video2.mp4
+python -m scripts.batch_transcribe path/to/video1.mp4 path/to/video2.mp4
 ```
 
 Process all MP4 files in a directory:
 ```bash
-./scripts/batch_transcribe.py path/to/directory/*.mp4
+python -m scripts.batch_transcribe path/to/directory/*.mp4
 ```
 
 Specify output directory and format:
 ```bash
-./scripts/batch_transcribe.py path/to/directory/*.mp4 -o path/to/output -f srt
+python -m scripts.batch_transcribe path/to/directory/*.mp4 -o path/to/output -f srt
 ```
 
 ## Streaming Transcription: `stream_transcribe.py`
@@ -300,7 +270,7 @@ Specify output directory and format:
 The `stream_transcribe.py` script processes a file in streaming mode to reduce memory usage.
 
 ```bash
-./scripts/stream_transcribe.py [OPTIONS] INPUT_PATH
+python -m scripts.stream_transcribe [OPTIONS] INPUT_PATH
 ```
 
 ### Options
@@ -315,38 +285,4 @@ The `stream_transcribe.py` script processes a file in streaming mode to reduce m
 ### Examples
 
 Basic streaming transcription:
-```bash
-./scripts/stream_transcribe.py path/to/video.mp4
 ```
-
-Specify output format and location:
-```bash
-./scripts/stream_transcribe.py path/to/video.mp4 -f srt -o path/to/output.srt
-```
-
-## Legacy Script: `transcribe_video.py`
-
-The `transcribe_video.py` script is the original script for basic transcription.
-
-```bash
-python -m scripts.transcribe_video [OPTIONS] INPUT_PATH
-```
-
-### Options
-
-- `--output, -o TEXT`: Output file path
-- `--format, -f [txt|srt|vtt|json]`: Output format (default: txt)
-- `--diarize / --no-diarize`: Enable/disable speaker diarization (default: enabled)
-- `--help`: Show help message and exit
-
-### Examples
-
-Basic transcription:
-```bash
-python -m scripts.transcribe_video path/to/video.mp4
-```
-
-Specify output format and location:
-```bash
-python -m scripts.transcribe_video path/to/video.mp4 -f srt -o path/to/output.srt
-``` 

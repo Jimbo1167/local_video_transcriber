@@ -223,8 +223,8 @@ def main():
     
     parser.add_argument(
         "--server", "-s",
-        default="http://localhost:5000",
-        help="Server URL (default: http://localhost:5000)"
+        default="http://localhost:8000",
+        help="Server URL (default: http://localhost:8000)"
     )
     
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")

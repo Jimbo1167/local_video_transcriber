@@ -61,13 +61,13 @@ cp .env.example .env
 
 ```bash
 # Start the model server
-./scripts/model_server.py start
+python -m scripts.model_server
 
 # Check the server status
-./scripts/model_client.py status
+python -m scripts.model_client status
 
 # Transcribe a file using the server
-./scripts/model_client.py transcribe path/to/your/video.mp4
+python -m scripts.model_client transcribe path/to/your/video.mp4
 ```
 
 ## Features
