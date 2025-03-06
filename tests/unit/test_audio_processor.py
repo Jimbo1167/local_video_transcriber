@@ -36,13 +36,19 @@ def test_is_audio_file(audio_processor):
     assert audio_processor.is_audio_file("test.txt") is False
 
 @patch("src.audio.processor.AudioFileClip")
-def test_get_audio_path_wav(mock_audio_file_clip, audio_processor):
+@patch("src.audio.processor.os.path.exists", return_value=True)
+def test_get_audio_path_wav(mock_exists, mock_audio_file_clip, audio_processor):
     """Test get_audio_path with WAV file."""
+    # Mock the cache manager
+    if audio_processor.cache_manager:
+        audio_processor.cache_manager.get_cached_audio = MagicMock(return_value=None)
+    
     # Test with WAV file
     audio_path, needs_cleanup = audio_processor.get_audio_path("test.wav")
     assert audio_path == "test.wav"
     assert needs_cleanup is False
     mock_audio_file_clip.assert_not_called()
+    mock_exists.assert_called_once_with("test.wav")
 
 @patch("src.audio.processor.AudioFileClip")
 def test_get_audio_path_mp3(mock_audio_file_clip, audio_processor):

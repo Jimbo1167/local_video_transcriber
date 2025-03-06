@@ -119,7 +119,7 @@ class TestAudioExtractor:
         
         assert not os.path.exists(output_path)
     
-    def test_timeout_handling(self, tmp_path):
+    def test_timeout_handling(self, tmp_path, test_files):
         """Test handling of timeout during extraction."""
         # Create an extractor with a 1-second timeout
         quick_extractor = AudioExtractor(timeout_seconds=1)
@@ -133,7 +133,7 @@ class TestAudioExtractor:
         with patch('moviepy.audio.AudioClip.AudioClip.write_audiofile', side_effect=slow_write_audiofile):
             with pytest.raises(ExtractionTimeoutError):
                 quick_extractor.extract_audio(
-                    "tests/fixtures/test_video.mp4",
+                    test_files["video"],
                     output_path
                 )
             
