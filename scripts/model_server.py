@@ -110,73 +110,143 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
         
         # Handle transcribe endpoint
         if parsed_path.path == '/transcribe':
-            # Get content length
-            content_length = int(self.headers.get('Content-Length', 0))
-            if content_length == 0:
-                self._send_error("Empty request body")
-                return
+            # Check content type
+            content_type = self.headers.get('Content-Type', '')
             
-            # Parse request body
-            try:
-                body = self.rfile.read(content_length)
-                request_data = json.loads(body.decode('utf-8'))
-            except json.JSONDecodeError:
-                self._send_error("Invalid JSON")
-                return
-            
-            # Check for required fields
-            if 'audio_path' not in request_data:
-                self._send_error("Missing required field: audio_path")
-                return
-            
-            # Get audio path
-            audio_path = request_data.get('audio_path')
-            if not os.path.exists(audio_path):
-                self._send_error(f"Audio file not found: {audio_path}", 404)
-                return
-            
-            # Update stats
-            stats["requests"] += 1
-            
-            # Process the request
-            try:
-                start_time = time.time()
+            # Handle multipart form data (file upload)
+            if content_type.startswith('multipart/form-data'):
+                import cgi
+                import tempfile
                 
-                # Acquire lock to ensure exclusive access to the model
-                with model_lock:
-                    # Transcribe the audio
-                    segments = transcription_engine.transcribe(audio_path)
+                # Parse multipart form data
+                form = cgi.FieldStorage(
+                    fp=self.rfile,
+                    headers=self.headers,
+                    environ={
+                        'REQUEST_METHOD': 'POST',
+                        'CONTENT_TYPE': content_type,
+                    }
+                )
                 
-                # Convert segments to a serializable format
-                result = []
-                for segment in segments:
-                    result.append({
-                        "start": segment["start"],
-                        "end": segment["end"],
-                        "text": segment["text"]
-                    })
+                # Check if file was uploaded
+                if 'file' not in form:
+                    self._send_error("No file uploaded")
+                    return
+                
+                # Get the uploaded file
+                file_item = form['file']
+                if not file_item.file:
+                    self._send_error("Empty file")
+                    return
+                
+                # Save the uploaded file to a temporary location
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
+                    temp_path = temp_file.name
+                    temp_file.write(file_item.file.read())
+                
+                # Get additional options
+                options = {}
+                for key in form.keys():
+                    if key != 'file':
+                        options[key] = form[key].value
                 
                 # Update stats
-                elapsed = time.time() - start_time
-                stats["successful"] += 1
-                stats["total_processing_time"] += elapsed
+                stats["requests"] += 1
                 
-                # Send response
-                self._send_json_response({
-                    "success": True,
-                    "segments": result,
-                    "processing_time": elapsed
-                })
-                
-            except Exception as e:
-                logger.error(f"Error processing request: {str(e)}")
-                stats["failed"] += 1
-                self._send_error(f"Error processing request: {str(e)}", 500)
+                try:
+                    # Process the audio file
+                    start_time = time.time()
+                    
+                    # Extract audio
+                    logger.info(f"Processing uploaded file: {temp_path}")
+                    
+                    # Transcribe the audio
+                    with model_lock:
+                        segments = transcription_engine.transcribe(temp_path)
+                    
+                    # Calculate processing time
+                    processing_time = time.time() - start_time
+                    stats["successful"] += 1
+                    stats["total_processing_time"] += processing_time
+                    
+                    # Send response
+                    self._send_json_response({
+                        "segments": segments,
+                        "processing_time": processing_time
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error processing request: {str(e)}")
+                    stats["failed"] += 1
+                    self._send_error(f"Error processing request: {str(e)}")
+                finally:
+                    # Clean up temporary file
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass
             
-            return
-        
-        # Handle unknown endpoints
-        self._send_error("Unknown endpoint", 404)
+            # Handle JSON request (legacy)
+            else:
+                # Get content length
+                content_length = int(self.headers.get('Content-Length', 0))
+                if content_length == 0:
+                    self._send_error("Empty request body")
+                    return
+                
+                # Parse request body
+                try:
+                    body = self.rfile.read(content_length)
+                    request_data = json.loads(body.decode('utf-8'))
+                except json.JSONDecodeError:
+                    self._send_error("Invalid JSON")
+                    return
+                except UnicodeDecodeError:
+                    self._send_error("Invalid encoding, expected UTF-8")
+                    return
+                
+                # Check for required fields
+                if 'audio_path' not in request_data:
+                    self._send_error("Missing required field: audio_path")
+                    return
+                
+                # Get audio path
+                audio_path = request_data.get('audio_path')
+                if not os.path.exists(audio_path):
+                    self._send_error(f"Audio file not found: {audio_path}", 404)
+                    return
+                
+                # Update stats
+                stats["requests"] += 1
+                
+                try:
+                    # Process the audio file
+                    start_time = time.time()
+                    
+                    # Extract audio
+                    logger.info(f"Processing audio file: {audio_path}")
+                    
+                    # Transcribe the audio
+                    with model_lock:
+                        segments = transcription_engine.transcribe(audio_path)
+                    
+                    # Calculate processing time
+                    processing_time = time.time() - start_time
+                    stats["successful"] += 1
+                    stats["total_processing_time"] += processing_time
+                    
+                    # Send response
+                    self._send_json_response({
+                        "segments": segments,
+                        "processing_time": processing_time
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error processing request: {str(e)}")
+                    stats["failed"] += 1
+                    self._send_error(f"Error processing request: {str(e)}")
+        else:
+            self._send_error(f"Unknown endpoint: {parsed_path.path}", 404)
 
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
