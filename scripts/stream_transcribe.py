@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """
-Script to transcribe audio or video files using streaming to reduce memory usage.
+Stream Transcribe Script
 
-This script provides a memory-efficient approach to transcription by processing
-audio in chunks, making it suitable for large files or systems with limited resources.
+This script demonstrates the streaming transcription functionality.
+It processes audio in chunks to reduce memory usage.
 """
 
 import os
 import sys
 import time
-import argparse
 import logging
-from typing import Dict, Any
+import argparse
 from pathlib import Path
 
-# Add the parent directory to the path so we can import the package
+# Add the parent directory to the path so we can import the src package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.config import Config
 from src.transcriber import Transcriber
+from src.utils.progress import ProgressReporter
 
 # Configure logging
 logging.basicConfig(
@@ -31,157 +31,181 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def display_segment(segment: Dict[str, Any], include_words: bool = False):
-    """Display a transcription segment."""
-    start = segment["start"]
-    end = segment["end"]
-    text = segment["text"]
-    
-    # Format timestamp as [MM:SS.mmm]
-    start_str = f"{int(start // 60):02d}:{int(start % 60):02d}.{int((start % 1) * 1000):03d}"
-    end_str = f"{int(end // 60):02d}:{int(end % 60):02d}.{int((end % 1) * 1000):03d}"
-    
-    # Add speaker if available
-    speaker = f" ({segment['speaker']})" if "speaker" in segment and segment["speaker"] else ""
-    
-    # Display the segment
-    print(f"[{start_str} --> {end_str}]{speaker} {text}")
-    
-    # Display words if requested
-    if include_words and "words" in segment and segment["words"]:
-        print("  Words:")
-        for word in segment["words"]:
-            word_start = word["start"]
-            word_end = word["end"]
-            word_text = word["word"]
-            
-            # Format timestamp as [MM:SS.mmm]
-            word_start_str = f"{int(word_start // 60):02d}:{int(word_start % 60):02d}.{int((word_start % 1) * 1000):03d}"
-            word_end_str = f"{int(word_end // 60):02d}:{int(word_end % 60):02d}.{int((word_end % 1) * 1000):03d}"
-            
-            print(f"    [{word_start_str} --> {word_end_str}] {word_text}")
-    
-    print()  # Empty line for readability
-
-def get_default_output_path(input_path, format="txt"):
-    """Generate default output path based on input filename.
-    
-    Args:
-        input_path: Path to the input file
-        format: Output format extension
-        
-    Returns:
-        Path to the output file
-    """
-    # Get the input filename without extension
-    base_name = os.path.splitext(os.path.basename(input_path))[0]
-    # Create output path in transcripts directory with appropriate extension
-    return os.path.join("transcripts", f"{base_name}_stream.{format}")
-
 def main():
-    """Main function."""
+    """Main function for the streaming transcription script."""
     parser = argparse.ArgumentParser(
         description="Transcribe audio or video files using streaming to reduce memory usage"
     )
-    parser.add_argument("input_path", help="Path to the audio or video file")
-    parser.add_argument("--output", "-o", help="Output file path (default: transcripts/<input_filename>_stream.txt)")
-    parser.add_argument("--diarize", "-d", action="store_true", help="Include speaker diarization")
-    parser.add_argument("--words", "-w", action="store_true", help="Include word-level timestamps")
-    parser.add_argument("--model", "-m", help="Whisper model size (tiny, base, small, medium, large)")
-    parser.add_argument("--language", "-l", help="Language code (e.g., en, fr, de)")
-    parser.add_argument("--format", "-f", choices=["txt", "srt", "vtt", "json"], help="Output format (default: txt)")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    
+    parser.add_argument(
+        "input_path",
+        help="Path to the input audio or video file"
+    )
+    
+    parser.add_argument(
+        "--output-path", "-o",
+        help="Path to save the transcript (default: input_file_name.txt)"
+    )
+    
+    parser.add_argument(
+        "--diarize", "-d",
+        action="store_true",
+        help="Include speaker diarization"
+    )
+    
+    parser.add_argument(
+        "--model", "-m",
+        help="Whisper model size (tiny, base, small, medium, large)"
+    )
+    
+    parser.add_argument(
+        "--language", "-l",
+        help="Language code (e.g., en, fr, de)"
+    )
+    
+    parser.add_argument(
+        "--format", "-f",
+        choices=["txt", "srt", "vtt", "json"],
+        help="Output format (default: txt)"
+    )
+    
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose logging"
+    )
     
     args = parser.parse_args()
     
-    # Configure logging
+    # Set up logging level
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    # Validate input path
-    if not os.path.exists(args.input_path):
+    # Validate input file
+    if not os.path.isfile(args.input_path):
         logger.error(f"Input file not found: {args.input_path}")
         return 1
     
-    logger.info("\n=== Starting Streaming Transcription Process ===")
-    start_time = time.time()
-    
-    # Create configuration from .env file
-    logger.info("Initializing configuration...")
-    config = Config(".env")  # Explicitly load from .env file
-    
-    # Override config with command line arguments
+    # Create configuration
+    config_kwargs = {}
     if args.model:
-        config.whisper_model_size = args.model
+        config_kwargs['whisper_model'] = args.model
     if args.language:
-        config.language = args.language
-    if args.diarize:
-        config.include_diarization = True
+        config_kwargs['language'] = args.language
     if args.format:
-        config._output_format = args.format
+        config_kwargs['output_format'] = args.format
+    if args.diarize:
+        config_kwargs['include_diarization'] = True
     
-    # Validate the configuration
-    if not config.validate():
-        logger.error("Invalid configuration. Please check your settings.")
-        sys.exit(1)
+    config = Config(**config_kwargs)
     
-    # Set default output path if not specified
-    output_format = args.format if args.format else "txt"
-    if args.output is None:
-        args.output = get_default_output_path(args.input_path, output_format)
+    # Generate output path if not specified
+    if not args.output_path:
+        input_file = Path(args.input_path)
+        ext = config.output_format
+        if ext == 'json':
+            ext = 'json'
+        elif ext == 'srt':
+            ext = 'srt'
+        elif ext == 'vtt':
+            ext = 'vtt'
+        else:
+            ext = 'txt'
+        output_path = str(input_file.with_suffix(f".{ext}"))
+    else:
+        output_path = args.output_path
     
     # Create transcriber
     transcriber = Transcriber(config)
     
+    # Process the file
+    logger.info(f"Processing {args.input_path} using streaming transcription...")
+    logger.info(f"Model: {config.whisper_model}, Language: {config.language or 'auto'}")
+    logger.info(f"Diarization: {'Enabled' if config.include_diarization else 'Disabled'}")
+    
+    start_time = time.time()
+    segments = []
+    
+    # Create progress reporter
+    progress = ProgressReporter(
+        desc="Transcribing",
+        unit="segment",
+        color="blue"
+    )
+    
     try:
-        logger.info(f"Starting streaming transcription of {args.input_path}")
-        logger.info(f"Model: {config.whisper_model_size}, Language: {config.language}, Diarization: {'Yes' if config.include_diarization else 'No'}")
-        logger.info("-" * 80)
-        
-        # Ensure the output directory exists if output is specified
-        if args.output:
-            os.makedirs(os.path.dirname(args.output), exist_ok=True)
-            output_file = open(args.output, "w", encoding="utf-8")
-        else:
-            output_file = None
-        
-        # Choose the appropriate transcription method
-        if config.include_diarization:
-            segments_generator = transcriber.transcribe_stream_with_diarization(args.input_path)
-        else:
-            segments_generator = transcriber.transcribe_stream(args.input_path)
-        
-        # Process segments as they become available
-        for segment in segments_generator:
-            # Display the segment
-            display_segment(segment, args.words)
-            
-            # Write to output file if specified
-            if output_file:
-                start_str = f"{int(segment['start'] // 60):02d}:{int(segment['start'] % 60):02d}.{int((segment['start'] % 1) * 1000):03d}"
-                end_str = f"{int(segment['end'] // 60):02d}:{int(segment['end'] % 60):02d}.{int((segment['end'] % 1) * 1000):03d}"
-                
-                speaker = f" ({segment['speaker']})" if "speaker" in segment and segment["speaker"] else ""
-                output_file.write(f"[{start_str} --> {end_str}]{speaker} {segment['text']}\n")
-        
-        # Close output file if opened
-        if output_file:
-            output_file.close()
-            logger.info(f"Transcript saved to {args.output}")
-        
-        # Display timing information
-        elapsed = time.time() - start_time
-        logger.info(f"Transcription completed in {elapsed:.1f} seconds ({elapsed/60:.1f} minutes)")
-        logger.info("=====================================")
-        
-        return 0
-        
+        with progress:
+            # Use streaming transcription with diarization
+            if config.include_diarization:
+                for segment in transcriber.transcribe_stream_with_diarization(args.input_path):
+                    segments.append((
+                        segment['start'],
+                        segment['end'],
+                        segment['text'],
+                        segment.get('speaker', 'SPEAKER')
+                    ))
+                    
+                    # Update progress
+                    progress.update(1, f"Segment {len(segments)}")
+                    progress.set_description(f"Transcribed {len(segments)} segments")
+                    progress.set_postfix(
+                        time=f"{segment['end']:.1f}s",
+                        speaker=segment.get('speaker', 'SPEAKER')
+                    )
+            else:
+                # Use streaming transcription without diarization
+                for segment in transcriber.transcribe_stream(args.input_path):
+                    segments.append((
+                        segment['start'],
+                        segment['end'],
+                        segment['text'],
+                        "SPEAKER"
+                    ))
+                    
+                    # Update progress
+                    progress.update(1, f"Segment {len(segments)}")
+                    progress.set_description(f"Transcribed {len(segments)} segments")
+                    progress.set_postfix(time=f"{segment['end']:.1f}s")
+    
     except KeyboardInterrupt:
-        logger.info("\nTranscription interrupted by user")
-        return 130
+        logger.warning("Transcription interrupted by user")
+        if len(segments) > 0:
+            logger.info(f"Saving partial transcript with {len(segments)} segments...")
+        else:
+            logger.error("No segments processed. Exiting without saving.")
+            return 1
+    
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
-        return 1
+        if len(segments) > 0:
+            logger.info(f"Saving partial transcript with {len(segments)} segments...")
+        else:
+            logger.error("No segments processed. Exiting without saving.")
+            return 1
+    
+    # Save transcript
+    if len(segments) > 0:
+        try:
+            transcriber.save_transcript(segments, output_path)
+            logger.info(f"Transcript saved to {output_path}")
+        except Exception as e:
+            logger.error(f"Error saving transcript: {str(e)}")
+            return 1
+    
+    # Print summary
+    elapsed_time = time.time() - start_time
+    logger.info(f"Processed {len(segments)} segments in {elapsed_time:.2f} seconds")
+    
+    # Get resource usage summary
+    resource_summary = progress.get_average_resource_usage()
+    logger.info("\nResource usage summary:")
+    logger.info(f"  CPU: {resource_summary.get('cpu_percent', 0):.1f}%")
+    logger.info(f"  Memory: {resource_summary.get('memory_used_gb', 0):.2f} GB")
+    
+    if 'gpu_memory_used_gb' in resource_summary and resource_summary['gpu_memory_used_gb'] > 0:
+        logger.info(f"  GPU Memory: {resource_summary['gpu_memory_used_gb']:.2f} GB")
+    
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main()) 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Client script for interacting with the model server.
+Model Client Script
 
-This script provides a command-line interface for sending transcription requests
-to the model server and viewing server status.
+This script provides a client interface to interact with the model server.
+It allows sending transcription requests and viewing server status.
 """
 
 import os
@@ -13,8 +13,12 @@ import json
 import logging
 import argparse
 import requests
-from typing import Dict, Any, Optional, List
 from pathlib import Path
+
+# Add the parent directory to the path so we can import the src package
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.utils.progress import ProgressReporter
 
 # Configure logging
 logging.basicConfig(
@@ -27,170 +31,201 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def get_server_status(server_url: str) -> Dict[str, Any]:
-    """Get the status of the model server.
-    
-    Args:
-        server_url: URL of the model server
-        
-    Returns:
-        Server status information
-    """
-    url = f"{server_url}/status"
-    
+def get_server_status(server_url):
+    """Get the status of the model server."""
     try:
-        response = requests.get(url)
+        response = requests.get(f"{server_url}/status")
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error getting server status: {e}")
-        sys.exit(1)
+        logger.error(f"Error connecting to server: {str(e)}")
+        return None
 
-def transcribe_file(server_url: str, audio_path: str) -> Dict[str, Any]:
-    """Send a transcription request to the model server.
+def transcribe_file(server_url, file_path, options=None):
+    """Send a transcription request to the server."""
+    if not os.path.isfile(file_path):
+        logger.error(f"File not found: {file_path}")
+        return None
     
-    Args:
-        server_url: URL of the model server
-        audio_path: Path to the audio file
-        
-    Returns:
-        Transcription results
-    """
-    url = f"{server_url}/transcribe"
-    
-    # Ensure the audio path is absolute
-    audio_path = os.path.abspath(audio_path)
-    
-    # Check if the file exists
-    if not os.path.exists(audio_path):
-        logger.error(f"Audio file not found: {audio_path}")
-        sys.exit(1)
-    
-    # Prepare request data
-    data = {
-        "audio_path": audio_path
-    }
+    # Create progress reporter
+    progress = ProgressReporter(
+        desc=f"Uploading {os.path.basename(file_path)}",
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024,
+        color="green"
+    )
     
     try:
-        logger.info(f"Sending transcription request for {audio_path}")
-        start_time = time.time()
+        # Prepare the request
+        files = {'file': open(file_path, 'rb')}
+        data = options or {}
         
-        response = requests.post(url, json=data)
-        response.raise_for_status()
+        # Get file size for progress reporting
+        file_size = os.path.getsize(file_path)
+        progress.total = file_size
         
-        elapsed = time.time() - start_time
-        logger.info(f"Request completed in {elapsed:.1f} seconds")
-        
-        return response.json()
+        with progress:
+            # Custom session with progress tracking
+            session = requests.Session()
+            
+            # Create a custom adapter to track upload progress
+            original_send = session.send
+            
+            def send_with_progress(*args, **kwargs):
+                response = original_send(*args, **kwargs)
+                # Update progress based on bytes sent
+                if hasattr(response.request, 'body') and response.request.body:
+                    progress.update_to(len(response.request.body), "Uploading")
+                return response
+            
+            session.send = send_with_progress
+            
+            # Send the request
+            response = session.post(
+                f"{server_url}/transcribe",
+                files=files,
+                data=data
+            )
+            response.raise_for_status()
+            
+            # Update progress to show processing
+            progress.set_description("Processing on server")
+            
+            # Check if the response is immediate or a job ID
+            result = response.json()
+            
+            if 'job_id' in result:
+                # This is an async job, poll for results
+                job_id = result['job_id']
+                progress.set_description(f"Processing job {job_id}")
+                
+                while True:
+                    time.sleep(1.0)  # Poll every second
+                    status_response = session.get(f"{server_url}/job/{job_id}")
+                    status_response.raise_for_status()
+                    job_status = status_response.json()
+                    
+                    if job_status['status'] == 'completed':
+                        progress.set_description("Completed")
+                        progress.update_to(file_size, "Completed")
+                        return job_status['result']
+                    elif job_status['status'] == 'failed':
+                        progress.set_description("Failed")
+                        logger.error(f"Job failed: {job_status.get('error', 'Unknown error')}")
+                        return None
+                    else:
+                        # Update progress based on job status
+                        if 'progress' in job_status:
+                            progress_pct = job_status['progress']
+                            progress.set_postfix(progress=f"{progress_pct:.1f}%")
+                            
+                            # If we have detailed progress info
+                            if 'current_segment' in job_status and 'total_segments' in job_status:
+                                progress.set_description(
+                                    f"Processing segment {job_status['current_segment']}/{job_status['total_segments']}"
+                                )
+            else:
+                # Immediate response
+                progress.set_description("Completed")
+                progress.update_to(file_size, "Completed")
+                return result
+                
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error sending transcription request: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_data = e.response.json()
-                logger.error(f"Server error: {error_data.get('error', 'Unknown error')}")
-            except:
-                logger.error(f"Server response: {e.response.text}")
-        sys.exit(1)
+        logger.error(f"Error during transcription request: {str(e)}")
+        return None
+    finally:
+        # Close the file
+        if 'files' in locals() and 'file' in files:
+            files['file'].close()
 
-def display_transcription(result: Dict[str, Any], output_path: Optional[str] = None):
-    """Display transcription results and optionally save to a file.
+def display_transcription(result):
+    """Display the transcription result."""
+    if not result:
+        return
     
-    Args:
-        result: Transcription results
-        output_path: Path to save the results to (optional)
-    """
-    segments = result.get("segments", [])
-    processing_time = result.get("processing_time", 0.0)
+    print("\n=== Transcription Result ===")
     
-    print("\n=== Transcription Results ===")
-    print(f"Processing time: {processing_time:.1f} seconds")
-    print(f"Segments: {len(segments)}")
-    print("-----------------------------")
-    
-    for i, segment in enumerate(segments):
-        start = segment["start"]
-        end = segment["end"]
-        text = segment["text"]
-        
-        # Format timestamp as [MM:SS.mmm]
-        start_str = f"{int(start // 60):02d}:{int(start % 60):02d}.{int((start % 1) * 1000):03d}"
-        end_str = f"{int(end // 60):02d}:{int(end % 60):02d}.{int((end % 1) * 1000):03d}"
-        
-        print(f"[{start_str} --> {end_str}] {text}")
-    
-    print("-----------------------------")
-    
-    # Save to file if requested
-    if output_path:
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write("=== Transcription Results ===\n")
-            f.write(f"Processing time: {processing_time:.1f} seconds\n")
-            f.write(f"Segments: {len(segments)}\n")
-            f.write("-----------------------------\n")
+    if 'segments' in result:
+        for segment in result['segments']:
+            start = segment.get('start', 0)
+            end = segment.get('end', 0)
+            text = segment.get('text', '')
+            speaker = segment.get('speaker', '')
             
-            for segment in segments:
-                start = segment["start"]
-                end = segment["end"]
-                text = segment["text"]
-                
-                # Format timestamp as [MM:SS.mmm]
-                start_str = f"{int(start // 60):02d}:{int(start % 60):02d}.{int((start % 1) * 1000):03d}"
-                end_str = f"{int(end // 60):02d}:{int(end % 60):02d}.{int((end % 1) * 1000):03d}"
-                
-                f.write(f"[{start_str} --> {end_str}] {text}\n")
+            # Format timestamp as [MM:SS.mmm]
+            start_str = f"{int(start // 60):02d}:{int(start % 60):02d}.{int((start % 1) * 1000):03d}"
+            end_str = f"{int(end // 60):02d}:{int(end % 60):02d}.{int((end % 1) * 1000):03d}"
             
-            f.write("-----------------------------\n")
-        
-        logger.info(f"Results saved to {output_path}")
-
-def display_server_status(status: Dict[str, Any]):
-    """Display server status information.
-    
-    Args:
-        status: Server status information
-    """
-    uptime = status.get("uptime", 0.0)
-    model = status.get("model", {})
-    stats = status.get("stats", {})
-    
-    # Format uptime
-    days = int(uptime // (24 * 3600))
-    hours = int((uptime % (24 * 3600)) // 3600)
-    minutes = int((uptime % 3600) // 60)
-    seconds = int(uptime % 60)
-    
-    if days > 0:
-        uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
-    elif hours > 0:
-        uptime_str = f"{hours}h {minutes}m {seconds}s"
-    elif minutes > 0:
-        uptime_str = f"{minutes}m {seconds}s"
+            # Add speaker if available
+            speaker_str = f" ({speaker})" if speaker else ""
+            
+            print(f"[{start_str} --> {end_str}]{speaker_str} {text}")
     else:
-        uptime_str = f"{seconds}s"
+        # Simple text output
+        print(result.get('text', 'No text available'))
+    
+    # Print metadata if available
+    if 'metadata' in result:
+        print("\n=== Metadata ===")
+        for key, value in result['metadata'].items():
+            print(f"{key}: {value}")
+    
+    print("\n=== Processing Info ===")
+    print(f"Processing time: {result.get('processing_time', 'N/A')} seconds")
+    if 'model' in result:
+        print(f"Model: {result['model']}")
+    if 'language' in result:
+        print(f"Detected language: {result['language']}")
+
+def display_server_status(status):
+    """Display the server status."""
+    if not status:
+        return
     
     print("\n=== Server Status ===")
-    print(f"Status: {status.get('status', 'unknown')}")
-    print(f"Uptime: {uptime_str}")
-    print("\nModel Information:")
-    print(f"  Model Size: {model.get('model_size', 'unknown')}")
-    print(f"  Language: {model.get('language', 'unknown')}")
-    print(f"  Device: {model.get('device', 'unknown')}")
-    print("\nStatistics:")
-    print(f"  Total Requests: {stats.get('requests', 0)}")
-    print(f"  Successful: {stats.get('successful', 0)}")
-    print(f"  Failed: {stats.get('failed', 0)}")
-    print(f"  Average Processing Time: {stats.get('avg_processing_time', 0.0):.1f} seconds")
-    print("=====================")
+    print(f"Status: {status.get('status', 'Unknown')}")
+    print(f"Uptime: {status.get('uptime', 'Unknown')}")
+    
+    # Display loaded models
+    if 'models' in status:
+        print("\n=== Loaded Models ===")
+        for model_name, model_info in status['models'].items():
+            print(f"- {model_name}: {model_info.get('status', 'Unknown')}")
+            if 'memory_usage' in model_info:
+                print(f"  Memory usage: {model_info['memory_usage']} MB")
+            if 'device' in model_info:
+                print(f"  Device: {model_info['device']}")
+    
+    # Display resource usage
+    if 'resources' in status:
+        resources = status['resources']
+        print("\n=== Resource Usage ===")
+        print(f"CPU: {resources.get('cpu_percent', 'N/A')}%")
+        print(f"Memory: {resources.get('memory_used', 'N/A')} / {resources.get('memory_total', 'N/A')} MB")
+        if 'gpu_memory_used' in resources:
+            print(f"GPU Memory: {resources['gpu_memory_used']} / {resources.get('gpu_memory_total', 'N/A')} MB")
+    
+    # Display job queue
+    if 'queue' in status:
+        queue = status['queue']
+        print("\n=== Job Queue ===")
+        print(f"Active jobs: {queue.get('active_jobs', 0)}")
+        print(f"Pending jobs: {queue.get('pending_jobs', 0)}")
+        print(f"Completed jobs: {queue.get('completed_jobs', 0)}")
+        print(f"Failed jobs: {queue.get('failed_jobs', 0)}")
 
 def main():
-    """Main function."""
+    """Main function for the model client script."""
     parser = argparse.ArgumentParser(
         description="Client for interacting with the model server"
     )
-    parser.add_argument("--server", default="http://localhost:8000",
-                       help="URL of the model server (default: http://localhost:8000)")
+    
+    parser.add_argument(
+        "--server", "-s",
+        default="http://localhost:5000",
+        help="Server URL (default: http://localhost:5000)"
+    )
     
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
     
@@ -198,23 +233,102 @@ def main():
     status_parser = subparsers.add_parser("status", help="Get server status")
     
     # Transcribe command
-    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe an audio file")
-    transcribe_parser.add_argument("audio_path", help="Path to the audio file")
-    transcribe_parser.add_argument("--output", "-o", help="Path to save the results to")
+    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe an audio or video file")
+    transcribe_parser.add_argument(
+        "file_path",
+        help="Path to the audio or video file"
+    )
+    transcribe_parser.add_argument(
+        "--model", "-m",
+        help="Whisper model size (tiny, base, small, medium, large)"
+    )
+    transcribe_parser.add_argument(
+        "--language", "-l",
+        help="Language code (e.g., en, fr, de)"
+    )
+    transcribe_parser.add_argument(
+        "--diarize", "-d",
+        action="store_true",
+        help="Include speaker diarization"
+    )
+    transcribe_parser.add_argument(
+        "--output", "-o",
+        help="Output file path (if not specified, result will be displayed)"
+    )
+    transcribe_parser.add_argument(
+        "--format", "-f",
+        choices=["txt", "srt", "vtt", "json"],
+        help="Output format (default: txt)"
+    )
     
     args = parser.parse_args()
     
-    # Default to status if no command is specified
+    # Default to status if no command specified
     if not args.command:
         args.command = "status"
     
     # Execute the command
     if args.command == "status":
         status = get_server_status(args.server)
-        display_server_status(status)
+        if status:
+            display_server_status(status)
+        else:
+            logger.error("Failed to get server status")
+            return 1
+    
     elif args.command == "transcribe":
-        result = transcribe_file(args.server, args.audio_path)
-        display_transcription(result, args.output)
+        # Prepare options
+        options = {}
+        if args.model:
+            options['model'] = args.model
+        if args.language:
+            options['language'] = args.language
+        if args.diarize:
+            options['diarize'] = 'true'
+        if args.format:
+            options['format'] = args.format
+        
+        # Send transcription request
+        result = transcribe_file(args.server, args.file_path, options)
+        
+        if result:
+            # Save to file if output path specified
+            if args.output:
+                try:
+                    with open(args.output, 'w', encoding='utf-8') as f:
+                        if args.format == 'json':
+                            json.dump(result, f, indent=2)
+                        else:
+                            # For text formats, write the formatted output
+                            if 'segments' in result:
+                                for segment in result['segments']:
+                                    start = segment.get('start', 0)
+                                    end = segment.get('end', 0)
+                                    text = segment.get('text', '')
+                                    speaker = segment.get('speaker', '')
+                                    
+                                    # Format timestamp as [MM:SS.mmm]
+                                    start_str = f"{int(start // 60):02d}:{int(start % 60):02d}.{int((start % 1) * 1000):03d}"
+                                    end_str = f"{int(end // 60):02d}:{int(end % 60):02d}.{int((end % 1) * 1000):03d}"
+                                    
+                                    # Add speaker if available
+                                    speaker_str = f" ({speaker})" if speaker else ""
+                                    
+                                    f.write(f"[{start_str} --> {end_str}]{speaker_str} {text}\n")
+                            else:
+                                # Simple text output
+                                f.write(result.get('text', 'No text available'))
+                    
+                    logger.info(f"Transcription saved to {args.output}")
+                except Exception as e:
+                    logger.error(f"Error saving output: {str(e)}")
+                    return 1
+            else:
+                # Display the result
+                display_transcription(result)
+        else:
+            logger.error("Transcription failed")
+            return 1
     
     return 0
 
