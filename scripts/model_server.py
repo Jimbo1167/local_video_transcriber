@@ -75,10 +75,11 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             uptime = time.time() - stats["start_time"]
             
             # Get model info
+            device = "CPU" if config.force_cpu else "GPU (if available)"
             model_info = {
                 "model_size": config.whisper_model_size,
                 "language": config.language,
-                "device": config.device
+                "device": device
             }
             
             # Calculate average processing time
