@@ -180,6 +180,11 @@ def display_transcription(result):
         print(f"Model: {result['model']}")
     if 'language' in result:
         print(f"Detected language: {result['language']}")
+    
+    # Print output file path if available
+    if 'output_file' in result:
+        print(f"\n=== Output File ===")
+        print(f"Transcript saved to: {result['output_file']}")
 
 def display_server_status(status):
     """Display the server status."""

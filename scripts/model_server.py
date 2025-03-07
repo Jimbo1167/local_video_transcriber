@@ -19,6 +19,7 @@ from typing import Dict, Any, Optional, List
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import socketserver
 import urllib.parse
+import pathlib
 
 # Add the parent directory to the path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -26,6 +27,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.config import Config
 from src.transcription.engine import TranscriptionEngine
 from src.audio.processor import AudioProcessor
+from src.output.formatter import OutputFormatter
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +44,7 @@ logger = logging.getLogger(__name__)
 config = None
 transcription_engine = None
 audio_processor = None
+output_formatter = None
 model_lock = threading.Lock()
 stats = {
     "requests": 0,
@@ -139,6 +142,9 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
                     self._send_error("Empty file")
                     return
                 
+                # Get the original filename
+                original_filename = os.path.basename(file_item.filename) if file_item.filename else "uploaded_file"
+                
                 # Save the uploaded file to a temporary location
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
                     temp_path = temp_file.name
@@ -149,6 +155,9 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
                 for key in form.keys():
                     if key != 'file':
                         options[key] = form[key].value
+                
+                # Get output format
+                output_format = options.get('format', config.output_format)
                 
                 # Update stats
                 stats["requests"] += 1
@@ -169,10 +178,26 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
                     stats["successful"] += 1
                     stats["total_processing_time"] += processing_time
                     
+                    # Save the transcript to the transcripts folder
+                    base_name = os.path.splitext(original_filename)[0]
+                    output_dir = os.path.join(os.getcwd(), "transcripts")
+                    os.makedirs(output_dir, exist_ok=True)
+                    
+                    # Set the output format in the config
+                    config.output_format = output_format
+                    
+                    # Create output path
+                    output_path = os.path.join(output_dir, f"{base_name}.{output_format}")
+                    
+                    # Save the transcript
+                    output_formatter.save_transcript(segments, output_path)
+                    logger.info(f"Saved transcript to {output_path}")
+                    
                     # Send response
                     self._send_json_response({
                         "segments": segments,
-                        "processing_time": processing_time
+                        "processing_time": processing_time,
+                        "output_file": output_path
                     })
                     
                 except Exception as e:
@@ -256,7 +281,7 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
 
 def initialize_models(config_path: Optional[str] = None):
     """Initialize the models and processors."""
-    global config, transcription_engine, audio_processor
+    global config, transcription_engine, audio_processor, output_formatter
     
     logger.info("Initializing models...")
     
@@ -268,6 +293,9 @@ def initialize_models(config_path: Optional[str] = None):
     
     # Initialize transcription engine
     transcription_engine = TranscriptionEngine(config)
+    
+    # Initialize output formatter
+    output_formatter = OutputFormatter(config)
     
     # Force model loading
     logger.info(f"Loading Whisper model: {config.whisper_model_size}")
