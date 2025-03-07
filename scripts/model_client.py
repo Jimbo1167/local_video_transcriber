@@ -51,7 +51,8 @@ def transcribe_file(server_url, file_path, options=None):
     progress = ProgressReporter(
         desc=f"Uploading {os.path.basename(file_path)}",
         unit="B",
-        color="green"
+        color="green",
+        total=os.path.getsize(file_path)
     )
     
     try:
@@ -61,7 +62,6 @@ def transcribe_file(server_url, file_path, options=None):
         
         # Get file size for progress reporting
         file_size = os.path.getsize(file_path)
-        progress.total = file_size
         
         with progress:
             # Custom session with progress tracking
@@ -74,7 +74,12 @@ def transcribe_file(server_url, file_path, options=None):
                 response = original_send(*args, **kwargs)
                 # Update progress based on bytes sent
                 if hasattr(response.request, 'body') and response.request.body:
-                    progress.update_to(len(response.request.body), "Uploading")
+                    # Calculate the difference between current and previous bytes sent
+                    current_bytes = len(response.request.body)
+                    # Store the current position as a completed value
+                    progress.completed = current_bytes
+                    # Update the progress bar description
+                    progress.set_description(f"Uploading {os.path.basename(file_path)} - {current_bytes/1024/1024:.1f} MB")
                 return response
             
             session.send = send_with_progress
