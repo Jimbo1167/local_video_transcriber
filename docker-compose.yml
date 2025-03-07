@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  transcription-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./transcripts:/app/transcripts
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - OUTPUT_FORMAT=${OUTPUT_FORMAT:-txt}
+      - INCLUDE_DIARIZATION=${INCLUDE_DIARIZATION:-false}
+      - FORCE_CPU=${FORCE_CPU:-true}
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+      - HF_TOKEN=${HF_TOKEN:-}
+    restart: unless-stopped

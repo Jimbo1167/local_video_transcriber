@@ -9,7 +9,7 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - Video to audio extraction
 - Speech-to-text transcription using Whisper
 - Speaker diarization
-- Multiple output formats (txt, srt, vtt)
+- Multiple output formats (txt, srt, vtt, json)
 - Progress tracking and timeout handling
 - Hardware acceleration support (CUDA, MPS)
 - Optimized parameters for different model sizes
@@ -19,6 +19,8 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - **Speaker Diarization**: Identify different speakers in the audio
 - **Multiple Output Formats**: Support for TXT, SRT, VTT, and JSON formats
 - **Configurable**: Extensive configuration options via environment variables or .env file
+- **Docker Support**: Containerized deployment
+- **AWS Deployment**: Ready for cloud deployment on AWS
 
 ## Architecture
 
@@ -115,6 +117,8 @@ WHISPER_MODEL=base  # Options: tiny, base, small, medium, large-v3
 
 ## Installation
 
+### Local Installation
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/yourusername/video_transcriber.git
@@ -136,6 +140,22 @@ make setup  # Creates venv and installs all dependencies
 ```bash
 cp .env.example .env
 ```
+
+### Docker Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/video_transcriber.git
+cd video_transcriber
+```
+
+2. Build and run the Docker container:
+```bash
+make docker-build
+make docker-run
+```
+
+3. For more details, see the [Docker Deployment Guide](./docs/deployment/docker.md).
 
 ## Configuration
 
@@ -213,12 +233,16 @@ python -m scripts.transcribe_video path/to/your/audio.wav
 The project includes several make commands to simplify common operations:
 
 ```bash
-make help     # Show all available commands
-make setup    # Create virtual environment and install dependencies
-make venv     # Create virtual environment only
-make install  # Install dependencies into existing virtual environment
-make test     # Run tests
-make clean    # Remove Python cache files and temporary files
+make help         # Show all available commands
+make setup        # Create virtual environment and install dependencies
+make venv         # Create virtual environment only
+make install      # Install dependencies into existing virtual environment
+make test         # Run tests
+make clean        # Remove Python cache files and temporary files
+make docker-build # Build Docker image
+make docker-run   # Run Docker container
+make docker-stop  # Stop Docker container
+make docker-clean # Clean Docker resources
 ```
 
 ### Manual Development Setup
@@ -236,6 +260,8 @@ python -m pytest tests/
 - **Model Selection**: Choose the appropriate model size based on your accuracy needs and hardware capabilities
 - **Hardware Acceleration**: Use CUDA (NVIDIA) or MPS (Apple Silicon) for faster processing
 - **Memory Usage**: Large files may require significant memory, especially with larger models
+- **Containerization**: Use Docker for consistent deployment across environments
+- **Cloud Deployment**: Deploy to AWS for scalable processing of large volumes of media
 
 ## Known Issues
 
