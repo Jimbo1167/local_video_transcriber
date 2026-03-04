@@ -102,7 +102,7 @@ class DiarizationEngine:
             logger.info(f"Loading diarization model: {self.diarization_model}")
             self.diarizer = Pipeline.from_pretrained(
                 self.diarization_model,
-                use_auth_token=self.hf_token,
+                token=self.hf_token,
                 cache_dir=os.path.join(self.cache_dir, "diarization")
             )
             # Use the device property directly

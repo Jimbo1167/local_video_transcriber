@@ -24,7 +24,7 @@ COPY scripts/ /app/scripts/
 RUN mkdir -p /app/transcripts
 
 # Set default configuration values
-ENV WHISPER_MODEL=base
+ENV WHISPER_MODEL=large-v3-turbo
 ENV OUTPUT_FORMAT=txt
 ENV INCLUDE_DIARIZATION=false
 ENV FORCE_CPU=true

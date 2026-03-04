@@ -25,8 +25,8 @@ class Config:
         
         # API tokens and model settings
         self.hf_token = os.getenv("HF_TOKEN")
-        self.whisper_model_size = os.getenv("WHISPER_MODEL", "base")
-        self.diarization_model = os.getenv("DIARIZATION_MODEL", "pyannote/speaker-diarization@2.1")
+        self.whisper_model_size = os.getenv("WHISPER_MODEL", "large-v3-turbo")
+        self.diarization_model = os.getenv("DIARIZATION_MODEL", "pyannote/speaker-diarization-community-1")
         self.language = os.getenv("LANGUAGE", "en")
         
         # Parse output format

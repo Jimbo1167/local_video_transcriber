@@ -95,7 +95,7 @@ class TranscriptionEngine:
         try:
             # Whisper works better on CPU for Apple Silicon
             compute_type = "int8"
-            if self.device == "cuda" and self.whisper_model_size in ["medium", "large-v1", "large-v2", "large-v3"]:
+            if self.device == "cuda" and self.whisper_model_size in ["medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo"]:
                 compute_type = "float16"  # Use float16 for larger models on CUDA
                 
             self.whisper = WhisperModel(
