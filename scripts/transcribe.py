@@ -110,15 +110,7 @@ def transcribe(input_path, output, diarize, model, language, output_format):
         output_dir = Path('transcripts')
         output_dir.mkdir(exist_ok=True)
         
-        ext = output_format or config.output_format
-        if ext == 'json':
-            ext = 'json'
-        elif ext == 'srt':
-            ext = 'srt'
-        elif ext == 'vtt':
-            ext = 'vtt'
-        else:
-            ext = 'txt'
+        ext = output_format or config.output_format or 'txt'
             
         output = str(output_dir / f"{input_file.stem}.{ext}")
     

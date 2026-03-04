@@ -68,7 +68,7 @@ class OutputFormatter:
         seconds = seconds % 60
         
         if vtt:
-            return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}".replace(".", ".")
+            return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}"
         else:
             return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}".replace(".", ",")
     

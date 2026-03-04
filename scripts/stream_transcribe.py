@@ -102,15 +102,7 @@ def main():
     # Generate output path if not specified
     if not args.output_path:
         input_file = Path(args.input_path)
-        ext = config.output_format
-        if ext == 'json':
-            ext = 'json'
-        elif ext == 'srt':
-            ext = 'srt'
-        elif ext == 'vtt':
-            ext = 'vtt'
-        else:
-            ext = 'txt'
+        ext = config.output_format or 'txt'
         output_path = str(input_file.with_suffix(f".{ext}"))
     else:
         output_path = args.output_path
@@ -120,7 +112,7 @@ def main():
     
     # Process the file
     logger.info(f"Processing {args.input_path} using streaming transcription...")
-    logger.info(f"Model: {config.whisper_model}, Language: {config.language or 'auto'}")
+    logger.info(f"Model: {config.whisper_model_size}, Language: {config.language or 'auto'}")
     logger.info(f"Diarization: {'Enabled' if config.include_diarization else 'Disabled'}")
     
     start_time = time.time()

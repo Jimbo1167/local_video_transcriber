@@ -67,15 +67,7 @@ def process_file(
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True)
         
-        ext = output_format or config.output_format
-        if ext == 'json':
-            ext = 'json'
-        elif ext == 'srt':
-            ext = 'srt'
-        elif ext == 'vtt':
-            ext = 'vtt'
-        else:
-            ext = 'txt'
+        ext = output_format or config.output_format or 'txt'
             
         output_path = str(output_dir_path / f"{input_file.stem}.{ext}")
         
@@ -258,6 +250,7 @@ def main(args=None):
                         future = pool.submit(
                             process_file,
                             input_file,
+                            config,
                             args.output_dir,
                             args.streaming,
                             args.format
@@ -307,6 +300,7 @@ def main(args=None):
                         executor.submit(
                             process_file,
                             input_file,
+                            config,
                             args.output_dir,
                             args.streaming,
                             args.format

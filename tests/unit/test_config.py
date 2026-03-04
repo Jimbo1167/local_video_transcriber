@@ -31,8 +31,8 @@ def test_config_init_defaults():
         config = Config()
         
         assert config.hf_token is None
-        assert config.whisper_model_size == "base"
-        assert config.diarization_model == "pyannote/speaker-diarization@2.1"
+        assert config.whisper_model_size == "large-v3-turbo"
+        assert config.diarization_model == "pyannote/speaker-diarization-community-1"
         assert config.language == "en"
         assert config.output_format == "txt"
         assert config.include_diarization is True
@@ -84,8 +84,8 @@ def test_config_to_dict():
         config_dict = config.to_dict()
         
         assert isinstance(config_dict, dict)
-        assert config_dict["whisper_model_size"] == "base"
-        assert config_dict["diarization_model"] == "pyannote/speaker-diarization@2.1"
+        assert config_dict["whisper_model_size"] == "large-v3-turbo"
+        assert config_dict["diarization_model"] == "pyannote/speaker-diarization-community-1"
         assert config_dict["language"] == "en"
         assert config_dict["output_format"] == "txt"
         assert config_dict["include_diarization"] is True

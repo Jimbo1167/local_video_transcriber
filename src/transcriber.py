@@ -3,7 +3,6 @@ import time
 import logging
 from typing import List, Tuple, Dict, Any, Optional, Union, Generator, Iterator
 import concurrent.futures
-import warnings
 
 from .config import Config
 from .audio.processor import AudioProcessor, TimeoutException
