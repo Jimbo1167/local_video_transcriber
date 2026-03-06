@@ -120,6 +120,20 @@ class DiarizationEngine:
         if self.include_diarization and self.diarizer is None:
             logger.info(f"Loading diarization model: {self.diarization_model}")
             self._load_model()
+
+    def _unwrap_diarization_result(self, diarization_result: Any):
+        """Normalize pyannote outputs across old and new API shapes."""
+        if hasattr(diarization_result, "itertracks"):
+            return diarization_result
+
+        for attr_name in ("speaker_diarization", "exclusive_speaker_diarization", "annotation"):
+            annotation = getattr(diarization_result, attr_name, None)
+            if annotation is not None and hasattr(annotation, "itertracks"):
+                return annotation
+
+        raise TypeError(
+            f"Unsupported diarization output type: {type(diarization_result).__name__}"
+        )
     
     def diarize(self, audio_path: str) -> Optional[List[Dict[str, Any]]]:
         """Perform speaker diarization with timeout.
@@ -157,7 +171,7 @@ class DiarizationEngine:
         try:
             with timeout(self.timeout_seconds, "Diarization timed out"):
                 # Run diarization
-                diarization = self.diarizer(audio_path)
+                diarization = self._unwrap_diarization_result(self.diarizer(audio_path))
                 
                 # Process the diarization results
                 segments = []
