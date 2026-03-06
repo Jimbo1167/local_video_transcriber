@@ -16,7 +16,7 @@ A Python tool for transcribing videos and audio files with speaker diarization. 
 - Video to audio extraction
 - Speech-to-text transcription using Whisper
 - Speaker diarization
-- Multiple output formats (txt, srt, vtt, json)
+- Multiple output formats (txt, pretty, srt, vtt, json)
 - Progress tracking and timeout handling
 - Hardware acceleration support (CUDA, MPS)
 - Optimized parameters for different model sizes
@@ -80,7 +80,8 @@ MAX_CACHE_SIZE=10737418240  # Maximum cache size in bytes (default: 10GB)
 - Audio: wav (direct processing), mp3, m4a, aac (auto-converted to wav)
 
 ### Output Formats
-- `txt`: Simple text format with speaker labels
+- `txt`: Raw text format with speaker labels and fine-grained timestamps
+- `pretty`: Readable text format with merged same-speaker paragraphs
 - `srt`: SubRip subtitle format with timestamps
 - `vtt`: WebVTT format for web video subtitles
 
@@ -171,7 +172,7 @@ Edit the `.env` file to configure:
 - `HF_TOKEN`: Your HuggingFace token for accessing models
 - `WHISPER_MODEL`: Whisper model size (tiny, base, small, medium, large)
 - `LANGUAGE`: Target language for transcription (default: en)
-- `OUTPUT_FORMAT`: Transcript format (txt, srt, vtt)
+- `OUTPUT_FORMAT`: Transcript format (txt, pretty, srt, vtt, json)
 - `INCLUDE_DIARIZATION`: Enable/disable speaker diarization
 - `CACHE_ENABLED`: Enable/disable caching system
 - `CACHE_EXPIRATION`: Cache expiration time in seconds

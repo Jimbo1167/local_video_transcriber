@@ -33,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define output format options
-OUTPUT_FORMATS = ['txt', 'srt', 'vtt', 'json']
+OUTPUT_FORMATS = ['txt', 'srt', 'vtt', 'json', 'pretty']
 
 # Define model size options
 MODEL_SIZES = ['tiny', 'base', 'small', 'medium', 'large']

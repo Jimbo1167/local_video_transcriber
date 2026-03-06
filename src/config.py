@@ -89,7 +89,7 @@ class Config:
         """Set the output format for transcripts.
         
         Args:
-            value: The output format (txt, srt, vtt, json)
+            value: The output format (txt, srt, vtt, json, pretty)
         """
         if value:
             value = value.strip()
@@ -130,7 +130,7 @@ class Config:
             return False
         
         # Check if output format is valid
-        valid_formats = ["txt", "srt", "vtt", "json"]
+        valid_formats = ["txt", "srt", "vtt", "json", "pretty"]
         if self.output_format not in valid_formats:
             logger.warning(f"Invalid output format: {self.output_format}. Must be one of {valid_formats}")
             return False

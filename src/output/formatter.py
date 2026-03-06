@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 from typing import List, Tuple, Dict, Any, Optional
 import math
 
@@ -47,6 +48,8 @@ class OutputFormatter:
                 self._save_vtt(segments, output_path)
             elif self.format == "json":
                 self._save_json(segments, output_path)
+            elif self.format == "pretty":
+                self._save_pretty(segments, output_path)
             else:
                 raise ValueError(f"Unsupported output format: {self.format}")
                 
@@ -54,6 +57,20 @@ class OutputFormatter:
         except Exception as e:
             logger.error(f"Error saving transcript: {e}")
             raise
+
+    def format_transcript(self, segments: List[Tuple[float, float, str, str]]) -> str:
+        """Format transcript content as a string for previews or console display."""
+        if self.format == "txt":
+            return self._format_txt(segments)
+        if self.format == "srt":
+            return self._format_srt(segments)
+        if self.format == "vtt":
+            return self._format_vtt(segments)
+        if self.format == "json":
+            return self._format_json(segments)
+        if self.format == "pretty":
+            return self._format_pretty(segments)
+        raise ValueError(f"Unsupported output format: {self.format}")
     
     def _format_timestamp(self, seconds: float, vtt: bool = False) -> str:
         """Format seconds as timestamp.
@@ -82,12 +99,7 @@ class OutputFormatter:
             output_path: Path to save the transcript
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            for start, end, text, speaker in segments:
-                timestamp = f"[{self._format_timestamp(start, False)} --> {self._format_timestamp(end, False)}]"
-                if speaker:
-                    f.write(f"{timestamp} {speaker}: {text}\n")
-                else:
-                    f.write(f"{timestamp} {text}\n")
+            f.write(self._format_txt(segments))
     
     def _save_srt(self, segments: List[Tuple[float, float, str, str]], output_path: str):
         """Save transcript in SRT format.
@@ -97,13 +109,7 @@ class OutputFormatter:
             output_path: Path to save the transcript
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            for i, (start, end, text, speaker) in enumerate(segments, 1):
-                f.write(f"{i}\n")
-                f.write(f"{self._format_timestamp(start)} --> {self._format_timestamp(end)}\n")
-                if speaker:
-                    f.write(f"{speaker}: {text}\n\n")
-                else:
-                    f.write(f"{text}\n\n")
+            f.write(self._format_srt(segments))
     
     def _save_vtt(self, segments: List[Tuple[float, float, str, str]], output_path: str):
         """Save transcript in WebVTT format.
@@ -113,14 +119,7 @@ class OutputFormatter:
             output_path: Path to save the transcript
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("WEBVTT\n\n")
-            for i, (start, end, text, speaker) in enumerate(segments, 1):
-                f.write(f"{i}\n")
-                f.write(f"{self._format_timestamp(start, True)} --> {self._format_timestamp(end, True)}\n")
-                if speaker:
-                    f.write(f"{speaker}: {text}\n\n")
-                else:
-                    f.write(f"{text}\n\n")
+            f.write(self._format_vtt(segments))
     
     def _save_json(self, segments: List[Tuple[float, float, str, str]], output_path: str):
         """Save transcript in JSON format.
@@ -129,6 +128,38 @@ class OutputFormatter:
             segments: List of (start_time, end_time, text, speaker) tuples
             output_path: Path to save the transcript
         """
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(self._format_json(segments))
+
+    def _format_txt(self, segments: List[Tuple[float, float, str, str]]) -> str:
+        lines = []
+        for start, end, text, speaker in segments:
+            timestamp = f"[{self._format_timestamp(start, False)} --> {self._format_timestamp(end, False)}]"
+            if speaker:
+                lines.append(f"{timestamp} {speaker}: {text}")
+            else:
+                lines.append(f"{timestamp} {text}")
+        return "\n".join(lines)
+
+    def _format_srt(self, segments: List[Tuple[float, float, str, str]]) -> str:
+        lines = []
+        for i, (start, end, text, speaker) in enumerate(segments, 1):
+            lines.append(str(i))
+            lines.append(f"{self._format_timestamp(start)} --> {self._format_timestamp(end)}")
+            lines.append(f"{speaker}: {text}" if speaker else text)
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def _format_vtt(self, segments: List[Tuple[float, float, str, str]]) -> str:
+        lines = ["WEBVTT", ""]
+        for i, (start, end, text, speaker) in enumerate(segments, 1):
+            lines.append(str(i))
+            lines.append(f"{self._format_timestamp(start, True)} --> {self._format_timestamp(end, True)}")
+            lines.append(f"{speaker}: {text}" if speaker else text)
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def _format_json(self, segments: List[Tuple[float, float, str, str]]) -> str:
         json_data = []
         for start, end, text, speaker in segments:
             json_data.append({
@@ -137,9 +168,99 @@ class OutputFormatter:
                 "text": text,
                 "speaker": speaker
             })
-            
+        return json.dumps(json_data, ensure_ascii=False, indent=2)
+
+    def _normalize_text(self, text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _starts_as_continuation(self, text: str) -> bool:
+        normalized = self._normalize_text(text)
+        if not normalized:
+            return True
+
+        first_word = normalized.split()[0].lower().strip("\"'([{")
+        continuation_words = {
+            "and", "but", "or", "so", "because", "that", "which", "who",
+            "then", "than", "if", "when", "while", "where", "as", "though",
+            "although", "though", "however", "yet", "also", "still",
+        }
+
+        return normalized[:1].islower() or first_word in continuation_words
+
+    def _ends_as_continuation(self, text: str) -> bool:
+        normalized = self._normalize_text(text)
+        if not normalized:
+            return True
+        return normalized.endswith((",", ";", ":", "-", "—"))
+
+    def _join_text(self, left: str, right: str) -> str:
+        left = self._normalize_text(left)
+        right = self._normalize_text(right)
+        if not left:
+            return right
+        if not right:
+            return left
+
+        if self._ends_as_continuation(left):
+            return f"{left} {right}"
+        if self._starts_as_continuation(right):
+            return f"{left} {right}"
+        return f"{left} {right}"
+
+    def _group_pretty_segments(
+        self, segments: List[Tuple[float, float, str, str]]
+    ) -> List[Dict[str, Any]]:
+        groups: List[Dict[str, Any]] = []
+
+        for start, end, text, speaker in segments:
+            text = self._normalize_text(text)
+            if not text:
+                continue
+
+            if not groups:
+                groups.append(
+                    {"start": start, "end": end, "speaker": speaker, "text": text}
+                )
+                continue
+
+            previous = groups[-1]
+            gap = start - previous["end"]
+            same_speaker = previous["speaker"] == speaker
+            should_merge = (
+                same_speaker and (
+                    gap <= 1.2
+                    or self._ends_as_continuation(previous["text"])
+                    or self._starts_as_continuation(text)
+                )
+            )
+
+            if should_merge:
+                previous["end"] = end
+                previous["text"] = self._join_text(previous["text"], text)
+            else:
+                groups.append(
+                    {"start": start, "end": end, "speaker": speaker, "text": text}
+                )
+
+        return groups
+
+    def _format_pretty(self, segments: List[Tuple[float, float, str, str]]) -> str:
+        """Format transcript in a speaker-aware readable paragraph format."""
+        groups = self._group_pretty_segments(segments)
+        blocks = []
+        for group in groups:
+            timestamp = (
+                f"[{self._format_timestamp(group['start'], False)}"
+                f" --> {self._format_timestamp(group['end'], False)}]"
+            )
+            heading = f"{timestamp} {group['speaker']}".rstrip()
+            blocks.append(f"{heading}\n{group['text']}")
+        return "\n\n".join(blocks)
+
+    def _save_pretty(self, segments: List[Tuple[float, float, str, str]], output_path: str):
+        """Save transcript in a speaker-aware readable paragraph format."""
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(json_data, f, ensure_ascii=False, indent=2)
+            f.write(self._format_pretty(segments))
     
     def format_transcript_for_display(self, segments: List[Tuple[float, float, str, str]]) -> str:
         """Format transcript for display in the console.
@@ -150,12 +271,4 @@ class OutputFormatter:
         Returns:
             Formatted transcript string
         """
-        lines = []
-        for start, end, text, speaker in segments:
-            timestamp = f"[{self._format_timestamp(start, False)} --> {self._format_timestamp(end, False)}]"
-            if speaker:
-                lines.append(f"{timestamp} {speaker}: {text}")
-            else:
-                lines.append(f"{timestamp} {text}")
-                
-        return "\n".join(lines) 
+        return self.format_transcript(segments)

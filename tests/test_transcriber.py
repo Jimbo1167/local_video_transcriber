@@ -110,7 +110,7 @@ def test_output_formats(test_transcriber, output_dir):
         (2.0, 4.0, "This is a test", "SPEAKER_02")
     ]
     
-    formats = ["txt", "srt", "vtt"]
+    formats = ["txt", "srt", "vtt", "pretty"]
     for fmt in formats:
         test_transcriber.output_format = fmt
         output_path = output_dir / f"test.{fmt}"
@@ -133,6 +133,10 @@ def test_output_formats(test_transcriber, output_dir):
             elif fmt == "vtt":
                 assert "WEBVTT" in content
                 assert "-->" in content
+            elif fmt == "pretty":
+                assert "SPEAKER_01" in content
+                assert "Hello world" in content
+                assert "\n\n" in content or "-->" in content
 
 @patch('faster_whisper.WhisperModel.transcribe', MockWhisperModel.transcribe)
 def test_transcribe_with_different_inputs(test_transcriber, tmp_path):

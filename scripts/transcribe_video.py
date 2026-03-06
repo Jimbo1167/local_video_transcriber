@@ -46,7 +46,7 @@ def main():
                        help='Path to the video or audio file to transcribe')
     parser.add_argument('--output', '-o', 
                        help='Output path for the transcript (default: transcripts/<input_filename>.<format>)')
-    parser.add_argument('--format', '-f', choices=['txt', 'srt', 'vtt', 'json'], 
+    parser.add_argument('--format', '-f', choices=['txt', 'srt', 'vtt', 'json', 'pretty'], 
                        help='Output format (default: from config)')
     parser.add_argument('--no-diarization', action='store_true',
                        help='Disable speaker diarization')
