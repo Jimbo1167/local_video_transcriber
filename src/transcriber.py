@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import List, Tuple, Dict, Any, Optional, Union, Generator, Iterator
+from typing import List, Tuple, Dict, Any, Optional, Union, Generator, Iterator, Callable
 import concurrent.futures
 
 from .config import Config
@@ -121,7 +121,11 @@ class Transcriber:
         
         return result
     
-    def transcribe(self, input_path: str) -> list[tuple[float, float, str, str]]:
+    def transcribe(
+        self,
+        input_path: str,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> list[tuple[float, float, str, str]]:
         """
         Transcribe an audio or video file.
         
@@ -138,11 +142,16 @@ class Transcriber:
         needs_cleanup = False
         
         try:
+            if progress_callback:
+                progress_callback("Preparing audio", 0.05)
+
             # Get audio path
             audio_path, needs_cleanup = self.audio_processor.get_audio_path(input_path)
             
             if self.include_diarization:
                 logger.info("\nStarting transcription and diarization...")
+                if progress_callback:
+                    progress_callback("Transcribing and diarizing", 0.2)
                 
                 # Start transcription and diarization concurrently
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -156,6 +165,8 @@ class Transcriber:
                     # Get transcription results
                     transcription_segments = future_transcription.result()
                     logger.info(f"\nTranscription complete. Found {len(transcription_segments)} segments.")
+                    if progress_callback:
+                        progress_callback("Aligning speakers", 0.78)
                     
                     # Convert transcription segments to a standard format
                     # Handle both dictionary format and object format
@@ -181,14 +192,20 @@ class Transcriber:
                     
                     # Combine transcription with speaker information
                     logger.info("Combining transcription with speaker information...")
+                    if progress_callback:
+                        progress_callback("Combining transcript", 0.9)
                     return self._combine_segments_with_speakers(standardized_segments, diarization_segments)
             else:
                 # Only run transcription if diarization is disabled
                 logger.info("\nStarting transcription...")
+                if progress_callback:
+                    progress_callback("Transcribing audio", 0.2)
                 
                 # Get transcription results
                 transcription_segments = self.transcription_engine.transcribe(audio_path)
                 logger.info(f"\nTranscription complete. Found {len(transcription_segments)} segments.")
+                if progress_callback:
+                    progress_callback("Finalizing transcript", 0.9)
                 
                 # Convert transcription segments to a standard format
                 standardized_segments = []

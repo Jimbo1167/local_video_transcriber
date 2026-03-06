@@ -30,6 +30,7 @@
               <span>Format</span>
               <select id="format" name="format">
                 <option value="txt">TXT</option>
+                <option value="pretty">Pretty TXT</option>
                 <option value="srt">SRT</option>
                 <option value="vtt">VTT</option>
                 <option value="json">JSON</option>
@@ -47,6 +48,10 @@
 
         <div id="status-card" class="status-card muted">
           <p id="status-text">Server idle.</p>
+          <div class="progress-shell" aria-hidden="true">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <p id="progress-meta" class="progress-meta">0%</p>
         </div>
 
         <section id="result" class="result hidden">

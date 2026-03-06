@@ -15,6 +15,7 @@ import logging
 import argparse
 import threading
 import tempfile
+import uuid
 from email.parser import BytesParser
 from email.policy import default as default_policy
 from typing import Dict, Any, Optional
@@ -56,6 +57,8 @@ stats = {
     "total_processing_time": 0.0,
     "start_time": time.time()
 }
+jobs_lock = threading.Lock()
+jobs: Dict[str, Dict[str, Any]] = {}
 
 
 def _update_stats(**kwargs):
@@ -91,6 +94,105 @@ def _parse_multipart(content_type, body):
             else:
                 fields[name] = (None, payload.decode('utf-8', errors='replace'))
     return fields
+
+
+def _set_job_state(job_id: str, **updates):
+    with jobs_lock:
+        if job_id in jobs:
+            jobs[job_id].update(updates)
+
+
+def _create_job(filename: str, output_format: str, include_diarization: bool) -> str:
+    job_id = uuid.uuid4().hex
+    with jobs_lock:
+        jobs[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "progress": 0.0,
+            "message": "Queued",
+            "filename": filename,
+            "format": output_format,
+            "include_diarization": include_diarization,
+            "result": None,
+            "error": None,
+            "created_at": time.time(),
+        }
+    return job_id
+
+
+def _run_transcription_job(
+    job_id: str,
+    temp_path: str,
+    original_filename: str,
+    output_format: str,
+    include_diarization: bool,
+):
+    start_time = time.time()
+
+    def progress_callback(message: str, progress: float):
+        _set_job_state(
+            job_id,
+            status="running",
+            message=message,
+            progress=max(0.0, min(progress, 1.0)),
+        )
+
+    try:
+        logger.info("Processing uploaded file for job %s: %s", job_id, temp_path)
+        progress_callback("Starting", 0.05)
+
+        original_diarization = service.config.include_diarization
+        service.config.include_diarization = include_diarization
+        service.transcriber.include_diarization = include_diarization
+        service.transcriber.diarization_engine.include_diarization = include_diarization
+
+        try:
+            result = service.transcribe_file(
+                temp_path,
+                output_format=output_format,
+                progress_callback=progress_callback,
+            )
+        finally:
+            service.config.include_diarization = original_diarization
+            service.transcriber.include_diarization = original_diarization
+            service.transcriber.diarization_engine.include_diarization = original_diarization
+
+        processing_time = time.time() - start_time
+        _update_stats(successful=1, total_processing_time=processing_time)
+
+        output_path = str(TRANSCRIPTS_ROOT / f"{Path(original_filename).stem}.{output_format}")
+        os.replace(result["output_file"], output_path)
+        logger.info("Saved transcript to %s", output_path)
+
+        _set_job_state(
+            job_id,
+            status="completed",
+            progress=1.0,
+            message="Completed",
+            result={
+                "segments": result["segments"],
+                "preview_text": result["preview_text"],
+                "output_format": result["output_format"],
+                "processing_time": processing_time,
+                "output_file": output_path,
+                "download_url": f"/transcripts/{Path(output_path).name}",
+            },
+        )
+    except Exception as e:
+        logger.error("Error processing job %s: %s", job_id, str(e))
+        _update_stats(failed=1)
+        _set_job_state(
+            job_id,
+            status="failed",
+            message="Failed",
+            error=str(e),
+        )
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                logger.warning("Failed to clean up temp file: %s", temp_path)
 
 
 class ModelRequestHandler(BaseHTTPRequestHandler):
@@ -155,6 +257,16 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
                 "model": model_info,
                 "stats": stats_snapshot
             })
+            return
+
+        if path.startswith("/api/jobs/"):
+            job_id = Path(path).name
+            with jobs_lock:
+                job = jobs.get(job_id)
+            if not job:
+                self._send_error("Job not found", 404)
+                return
+            self._send_json_response(job)
             return
 
         if path == "/":
@@ -231,7 +343,7 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
         output_format = config.output_format
         if 'format' in fields:
             _, fmt_value = fields['format']
-            if fmt_value in ('txt', 'srt', 'vtt', 'json'):
+            if fmt_value in ('txt', 'srt', 'vtt', 'json', 'pretty'):
                 output_format = fmt_value
 
         include_diarization = config.include_diarization
@@ -249,35 +361,22 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
 
             _update_stats(requests=1)
 
-            # Process the audio file
-            start_time = time.time()
-            logger.info(f"Processing uploaded file: {temp_path}")
+            job_id = _create_job(original_filename, output_format, include_diarization)
+            _set_job_state(job_id, status="running", progress=0.1, message="Upload complete")
 
-            original_diarization = service.config.include_diarization
-            service.config.include_diarization = include_diarization
-            service.transcriber.include_diarization = include_diarization
-            service.transcriber.diarization_engine.include_diarization = include_diarization
-
-            try:
-                result = service.transcribe_file(temp_path, output_format=output_format)
-            finally:
-                service.config.include_diarization = original_diarization
-                service.transcriber.include_diarization = original_diarization
-                service.transcriber.diarization_engine.include_diarization = original_diarization
-
-            processing_time = time.time() - start_time
-            _update_stats(successful=1, total_processing_time=processing_time)
-
-            output_path = str(TRANSCRIPTS_ROOT / f"{Path(original_filename).stem}.{output_format}")
-            os.replace(result["output_file"], output_path)
-            logger.info(f"Saved transcript to {output_path}")
+            threading.Thread(
+                target=_run_transcription_job,
+                args=(job_id, temp_path, original_filename, output_format, include_diarization),
+                daemon=True,
+            ).start()
+            temp_path = None
 
             self._send_json_response({
-                "segments": result["segments"],
-                "processing_time": processing_time,
-                "output_file": output_path,
-                "download_url": f"/transcripts/{Path(output_path).name}",
-            })
+                "job_id": job_id,
+                "status": "queued",
+                "progress": 0.1,
+                "message": "Upload complete",
+            }, status=202)
 
         except Exception as e:
             logger.error(f"Error processing request: {str(e)}")

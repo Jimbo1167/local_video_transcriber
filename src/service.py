@@ -2,7 +2,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 import logging
 
 from .config import Config
@@ -63,21 +63,32 @@ class TranscriptionService:
         input_path: str,
         output_path: Optional[str] = None,
         output_format: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
 
         with self._lock:
-            segments = self.transcriber.transcribe(input_path)
+            segments = self.transcriber.transcribe(
+                input_path,
+                progress_callback=progress_callback,
+            )
 
         output_format = output_format or self.config.output_format
         output_path = output_path or self.build_output_path(input_path, output_format)
 
         formatter = OutputFormatter(self.config)
         formatter.format = output_format
+        if progress_callback:
+            progress_callback("Saving transcript", 0.96)
+        preview_text = formatter.format_transcript(segments)
         formatter.save_transcript(segments, output_path)
+        if progress_callback:
+            progress_callback("Completed", 1.0)
 
         return {
             "segments": segments,
+            "preview_text": preview_text,
+            "output_format": output_format,
             "output_file": output_path,
             "processing_time": time.time() - start_time,
         }

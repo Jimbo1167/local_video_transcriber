@@ -158,4 +158,23 @@ def test_combine_segments_with_speakers(transcriber):
     # Check the result
     assert len(result) == 2
     assert result[0] == (0.0, 2.0, "Test segment one", "")
-    assert result[1] == (2.0, 4.0, "Test segment two", "") 
+    assert result[1] == (2.0, 4.0, "Test segment two", "")
+
+
+def test_transcribe_reports_progress(transcriber, mock_audio_processor, mock_transcription_engine):
+    """Test that transcribe emits coarse progress updates."""
+    mock_audio_processor.get_audio_path.return_value = ("test.wav", False)
+    transcriber.include_diarization = False
+    transcriber.config.include_diarization = False
+
+    progress_events = []
+
+    result = transcriber.transcribe(
+        "test.mp4",
+        progress_callback=lambda message, progress: progress_events.append((message, progress)),
+    )
+
+    assert len(result) == 2
+    assert progress_events
+    assert progress_events[0][0] == "Preparing audio"
+    assert progress_events[-1][0] == "Finalizing transcript"
