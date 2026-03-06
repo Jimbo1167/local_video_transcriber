@@ -58,11 +58,14 @@ class DiarizationEngine:
         
         # Load the diarization model if needed
         self.diarizer = None
-        if self.include_diarization:
+        if self.include_diarization and self.test_mode:
             self._load_model()
     
     def _load_model(self):
         """Load the diarization model."""
+        if self.diarizer is not None:
+            return
+
         if not self.include_diarization:
             logger.info("Diarization is disabled, skipping model loading")
             return
@@ -111,6 +114,12 @@ class DiarizationEngine:
         except Exception as e:
             logger.error(f"Error loading diarization model: {e}")
             raise
+
+    def ensure_model_loaded(self):
+        """Load the diarization model on demand."""
+        if self.include_diarization and self.diarizer is None:
+            logger.info(f"Loading diarization model: {self.diarization_model}")
+            self._load_model()
     
     def diarize(self, audio_path: str) -> Optional[List[Dict[str, Any]]]:
         """Perform speaker diarization with timeout.
@@ -137,7 +146,7 @@ class DiarizationEngine:
             
         if not self.diarizer:
             logger.warning("Diarizer not initialized, attempting to load model")
-            self._load_model()
+            self.ensure_model_loaded()
             if not self.diarizer:
                 logger.error("Failed to load diarization model")
                 return None

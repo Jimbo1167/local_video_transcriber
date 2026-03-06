@@ -18,7 +18,7 @@ from typing import Optional, List, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.config import Config
-from src.transcriber import Transcriber
+from src.service import TranscriptionService
 from src.utils.resource_monitor import ResourceMonitor
 
 # Configure logging
@@ -101,8 +101,7 @@ def transcribe(input_path, output, diarize, model, language, output_format):
     
     config = Config(**config_kwargs)
     
-    # Create transcriber
-    transcriber = Transcriber(config)
+    service = TranscriptionService(config)
     
     # Generate output path if not provided
     if not output:
@@ -118,19 +117,16 @@ def transcribe(input_path, output, diarize, model, language, output_format):
     with ResourceMonitor() as monitor:
         # Perform transcription
         click.echo(click.style(f"Transcribing {input_path}...", fg="green"))
-        segments = transcriber.transcribe(input_path)
-        
-        # Save transcript
         click.echo(click.style(f"Saving transcript to {output}...", fg="green"))
-        transcriber.save_transcript(segments, output)
+        service.transcribe_file(input_path, output_path=output)
     
     # Print resource usage
     metrics = monitor.get_average_metrics()
     click.echo(click.style("\nResource usage:", fg="blue"))
     click.echo(f"  CPU: {metrics['cpu_percent']:.1f}%")
-    click.echo(f"  Memory: {metrics['memory_used_gb']:.2f} GB")
-    if 'gpu_memory_used_gb' in metrics and metrics['gpu_memory_used_gb'] > 0:
-        click.echo(f"  GPU Memory: {metrics['gpu_memory_used_gb']:.2f} GB")
+    click.echo(f"  Memory: {metrics['memory_percent']:.1f}%")
+    if metrics.get('gpu_memory_percent', 0) > 0:
+        click.echo(f"  GPU Memory: {metrics['gpu_memory_percent']:.1f}%")
     
     # Print elapsed time
     elapsed_time = time.time() - start_time

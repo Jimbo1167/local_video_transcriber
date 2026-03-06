@@ -32,6 +32,7 @@ class TranscriptionEngine:
         self.language = config.language
         self.whisper_model_size = config.whisper_model_size
         self.test_mode = test_mode
+        self.whisper = None
         
         # Cache directory for models
         self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "video_transcriber")
@@ -54,11 +55,15 @@ class TranscriptionEngine:
             self.device = "cpu"
             logger.info("Using CPU for processing (no GPU acceleration available)")
         
-        logger.info(f"Loading Whisper model ({self.whisper_model_size})...")
-        self._load_model()
+        if self.test_mode:
+            logger.info(f"Loading Whisper model ({self.whisper_model_size})...")
+            self._load_model()
     
     def _load_model(self):
         """Load the Whisper model."""
+        if self.whisper is not None:
+            return
+
         if self.test_mode:
             logger.info("Test mode enabled, using mock whisper model")
             # Create a mock whisper model for testing
@@ -108,6 +113,12 @@ class TranscriptionEngine:
         except Exception as e:
             logger.error(f"Error loading Whisper model: {e}")
             raise
+
+    def ensure_model_loaded(self):
+        """Load the model on demand."""
+        if self.whisper is None:
+            logger.info(f"Loading Whisper model ({self.whisper_model_size})...")
+            self._load_model()
     
     def transcribe(self, audio_path: str) -> List[Dict[str, Any]]:
         """
@@ -131,7 +142,7 @@ class TranscriptionEngine:
         
         if not self.whisper:
             logger.warning("Whisper model not initialized, attempting to load model")
-            self._load_model()
+            self.ensure_model_loaded()
             if not self.whisper:
                 logger.error("Failed to load Whisper model")
                 raise Exception("Failed to load Whisper model")
@@ -214,7 +225,7 @@ class TranscriptionEngine:
         """
         if not self.whisper:
             logger.warning("Whisper model not initialized, attempting to load model")
-            self._load_model()
+            self.ensure_model_loaded()
             if not self.whisper:
                 logger.error("Failed to load Whisper model")
                 raise Exception("Failed to load Whisper model")
@@ -252,7 +263,7 @@ class TranscriptionEngine:
         """
         if not self.whisper:
             logger.warning("Whisper model not initialized, attempting to load model")
-            self._load_model()
+            self.ensure_model_loaded()
             if not self.whisper:
                 logger.error("Failed to load Whisper model")
                 raise Exception("Failed to load Whisper model")

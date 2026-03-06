@@ -58,7 +58,7 @@ endif
 
 # ── Server ─────────────────────────────────────────────
 
-# Start the model server
+# Start the model server and browser UI
 #   make server
 #   make server PORT=9000
 server:
@@ -124,7 +124,7 @@ help:
 	@echo "    make batch FILE=\"*.mp4\" WORKERS=4            Batch with parallel workers"
 	@echo ""
 	@echo "  Server:"
-	@echo "    make server                     Start the model server (port 8000)"
+	@echo "    make server                     Start the model server and web UI (port 8000)"
 	@echo "    make server PORT=9000           Start on a custom port"
 	@echo "    make client-status              Check server status"
 	@echo "    make client-transcribe FILE=f   Transcribe via running server"

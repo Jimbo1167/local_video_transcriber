@@ -21,14 +21,13 @@ from typing import Dict, Any, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import socketserver
 import urllib.parse
+from pathlib import Path
 
 # Add the parent directory to the path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.config import Config
-from src.transcription.engine import TranscriptionEngine
-from src.audio.processor import AudioProcessor
-from src.output.formatter import OutputFormatter
+from src.service import TranscriptionService
 
 # Configure logging
 logging.basicConfig(
@@ -43,13 +42,12 @@ logger = logging.getLogger(__name__)
 
 # Maximum upload size: 500MB
 MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
+TRANSCRIPTS_ROOT = Path.cwd() / "transcripts"
 
 # Global variables
 config = None
-transcription_engine = None
-audio_processor = None
-output_formatter = None
-model_lock = threading.Lock()
+service = None
 stats_lock = threading.Lock()
 stats = {
     "requests": 0,
@@ -105,6 +103,20 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data).encode('utf-8'))
 
+    def _send_file_response(self, file_path: Path, content_type: str):
+        """Send a static file response."""
+        if not file_path.exists() or not file_path.is_file():
+            self._send_error("File not found", 404)
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(file_path.stat().st_size))
+        self.end_headers()
+
+        with open(file_path, "rb") as file_handle:
+            self.wfile.write(file_handle.read())
+
     def _send_error(self, message: str, status: int = 400):
         """Send an error response."""
         self._send_json_response({"error": message}, status)
@@ -112,9 +124,10 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests."""
         parsed_path = urllib.parse.urlparse(self.path)
+        path = parsed_path.path
 
         # Handle status endpoint
-        if parsed_path.path == '/status':
+        if path in ('/status', '/api/status'):
             # Calculate uptime
             with stats_lock:
                 uptime = time.time() - stats["start_time"]
@@ -144,6 +157,23 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             })
             return
 
+        if path == "/":
+            self._send_file_response(WEB_ROOT / "index.html", "text/html; charset=utf-8")
+            return
+
+        if path == "/app.js":
+            self._send_file_response(WEB_ROOT / "app.js", "application/javascript; charset=utf-8")
+            return
+
+        if path == "/app.css":
+            self._send_file_response(WEB_ROOT / "app.css", "text/css; charset=utf-8")
+            return
+
+        if path.startswith("/transcripts/"):
+            filename = Path(path.removeprefix("/transcripts/")).name
+            self._send_file_response(TRANSCRIPTS_ROOT / filename, "text/plain; charset=utf-8")
+            return
+
         # Handle unknown endpoints
         self._send_error("Unknown endpoint", 404)
 
@@ -152,7 +182,7 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
 
         # Handle transcribe endpoint
-        if parsed_path.path == '/transcribe':
+        if parsed_path.path in ('/transcribe', '/api/transcribe'):
             # Check content type
             content_type = self.headers.get('Content-Type', '')
 
@@ -204,10 +234,16 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             if fmt_value in ('txt', 'srt', 'vtt', 'json'):
                 output_format = fmt_value
 
+        include_diarization = config.include_diarization
+        if 'diarize' in fields:
+            _, diarize_value = fields['diarize']
+            include_diarization = diarize_value.lower() in ("true", "1", "yes", "on")
+
         # Save the uploaded file to a temporary location
         temp_path = None
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
+            suffix = Path(original_filename).suffix or ".tmp"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
                 temp_path = temp_file.name
                 temp_file.write(file_data)
 
@@ -217,31 +253,30 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             start_time = time.time()
             logger.info(f"Processing uploaded file: {temp_path}")
 
-            # Transcribe the audio
-            with model_lock:
-                segments = transcription_engine.transcribe(temp_path)
+            original_diarization = service.config.include_diarization
+            service.config.include_diarization = include_diarization
+            service.transcriber.include_diarization = include_diarization
+            service.transcriber.diarization_engine.include_diarization = include_diarization
 
-            # Calculate processing time
+            try:
+                result = service.transcribe_file(temp_path, output_format=output_format)
+            finally:
+                service.config.include_diarization = original_diarization
+                service.transcriber.include_diarization = original_diarization
+                service.transcriber.diarization_engine.include_diarization = original_diarization
+
             processing_time = time.time() - start_time
             _update_stats(successful=1, total_processing_time=processing_time)
 
-            # Save the transcript to the transcripts folder
-            base_name = os.path.splitext(original_filename)[0]
-            output_dir = os.path.join(os.getcwd(), "transcripts")
-            os.makedirs(output_dir, exist_ok=True)
-
-            # Create a per-request formatter to avoid mutating shared state
-            per_request_formatter = OutputFormatter(config)
-            per_request_formatter.format = output_format
-
-            output_path = os.path.join(output_dir, f"{base_name}.{output_format}")
-            per_request_formatter.save_transcript(segments, output_path)
+            output_path = str(TRANSCRIPTS_ROOT / f"{Path(original_filename).stem}.{output_format}")
+            os.replace(result["output_file"], output_path)
             logger.info(f"Saved transcript to {output_path}")
 
             self._send_json_response({
-                "segments": segments,
+                "segments": result["segments"],
                 "processing_time": processing_time,
-                "output_file": output_path
+                "output_file": output_path,
+                "download_url": f"/transcripts/{Path(output_path).name}",
             })
 
         except Exception as e:
@@ -272,31 +307,27 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             self._send_error("Invalid encoding, expected UTF-8")
             return
 
-        # Check for required fields
-        if 'audio_path' not in request_data:
+        input_path = request_data.get("audio_path") or request_data.get("input_path")
+        if not input_path:
             self._send_error("Missing required field: audio_path")
             return
 
-        # Get audio path
-        audio_path = request_data.get('audio_path')
-        if not os.path.exists(audio_path):
-            self._send_error(f"Audio file not found: {audio_path}", 404)
+        if not os.path.exists(input_path):
+            self._send_error(f"Audio file not found: {input_path}", 404)
             return
 
         _update_stats(requests=1)
 
         try:
             start_time = time.time()
-            logger.info(f"Processing audio file: {audio_path}")
+            logger.info(f"Processing audio file: {input_path}")
 
-            with model_lock:
-                segments = transcription_engine.transcribe(audio_path)
-
+            result = service.transcribe_existing_audio(input_path)
             processing_time = time.time() - start_time
             _update_stats(successful=1, total_processing_time=processing_time)
 
             self._send_json_response({
-                "segments": segments,
+                "segments": result["segments"],
                 "processing_time": processing_time
             })
 
@@ -313,25 +344,13 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
 
 def initialize_models(config_path: Optional[str] = None):
     """Initialize the models and processors."""
-    global config, transcription_engine, audio_processor, output_formatter
+    global config, service
 
     logger.info("Initializing models...")
 
     # Load configuration
     config = Config(config_path or ".env")
-
-    # Initialize audio processor
-    audio_processor = AudioProcessor(config)
-
-    # Initialize transcription engine
-    transcription_engine = TranscriptionEngine(config)
-
-    # Initialize output formatter
-    output_formatter = OutputFormatter(config)
-
-    # Force model loading
-    logger.info(f"Loading Whisper model: {config.whisper_model_size}")
-    transcription_engine._load_model()
+    service = TranscriptionService(config=config, preload_models=True)
 
     logger.info("Models initialized successfully")
 

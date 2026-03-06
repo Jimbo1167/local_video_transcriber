@@ -35,7 +35,7 @@ def test_config_init_defaults():
         assert config.diarization_model == "pyannote/speaker-diarization-community-1"
         assert config.language == "en"
         assert config.output_format == "txt"
-        assert config.include_diarization is True
+        assert config.include_diarization is False
         assert config.audio_timeout == 300
         assert config.transcribe_timeout == 3600
         assert config.diarize_timeout == 3600
@@ -88,7 +88,7 @@ def test_config_to_dict():
         assert config_dict["diarization_model"] == "pyannote/speaker-diarization-community-1"
         assert config_dict["language"] == "en"
         assert config_dict["output_format"] == "txt"
-        assert config_dict["include_diarization"] is True
+        assert config_dict["include_diarization"] is False
         assert config_dict["audio_timeout"] == 300
         assert config_dict["transcribe_timeout"] == 3600
         assert config_dict["diarize_timeout"] == 3600

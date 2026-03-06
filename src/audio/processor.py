@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import wave
 from typing import Tuple, Optional, Generator, Iterator
 import numpy as np
 from moviepy.editor import VideoFileClip
@@ -12,6 +13,18 @@ from ..config import Config
 from ..cache.manager import CacheManager
 
 logger = logging.getLogger(__name__)
+
+
+def _resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """Resample mono audio with linear interpolation."""
+    if orig_sr == target_sr or len(audio) == 0:
+        return audio.astype(np.float32, copy=False)
+
+    duration = len(audio) / float(orig_sr)
+    target_length = max(1, int(round(duration * target_sr)))
+    source_positions = np.arange(len(audio), dtype=np.float32)
+    target_positions = np.linspace(0, max(len(audio) - 1, 0), num=target_length, dtype=np.float32)
+    return np.interp(target_positions, source_positions, audio).astype(np.float32)
 
 class TimeoutException(Exception):
     """Raised when an operation times out."""
@@ -202,8 +215,24 @@ class AudioProcessor:
         """
         logger.info(f"Loading audio file: {audio_path}")
         try:
-            import librosa
-            audio, sr = librosa.load(audio_path, sr=target_sr, mono=True)
+            with wave.open(audio_path, "rb") as wav_file:
+                sample_rate = wav_file.getframerate()
+                sample_width = wav_file.getsampwidth()
+                channels = wav_file.getnchannels()
+                frames = wav_file.readframes(wav_file.getnframes())
+
+            dtype_map = {1: np.int8, 2: np.int16, 4: np.int32}
+            if sample_width not in dtype_map:
+                raise ValueError(f"Unsupported WAV sample width: {sample_width}")
+
+            audio = np.frombuffer(frames, dtype=dtype_map[sample_width]).astype(np.float32)
+            scale = float(2 ** (8 * sample_width - 1))
+            audio = audio / scale
+
+            if channels > 1:
+                audio = audio.reshape(-1, channels).mean(axis=1)
+
+            audio = _resample_audio(audio, sample_rate, target_sr)
             logger.info(f"Loaded audio: {len(audio)/target_sr:.1f} seconds at {target_sr}Hz")
             return audio
         except Exception as e:
@@ -243,49 +272,37 @@ class AudioProcessor:
         """
         logger.info(f"Streaming audio from file: {audio_path}")
         try:
-            import librosa
-            import soundfile as sf
-            
-            # Get audio info without loading the entire file
-            info = sf.info(audio_path)
-            total_duration = info.duration
-            sample_rate = info.samplerate
-            
-            # Calculate chunk size in frames
-            chunk_size = int(chunk_duration * sample_rate)
-            
-            logger.info(f"Audio file: {total_duration:.1f} seconds at {sample_rate}Hz")
-            logger.info(f"Streaming in chunks of {chunk_duration:.1f} seconds")
-            
-            # Stream the audio in chunks
-            with sf.SoundFile(audio_path) as sf_file:
-                # Resample if needed
-                resampling_ratio = target_sr / sample_rate if sample_rate != target_sr else 1.0
-                
-                while sf_file.tell() < sf_file.frames:
-                    # Read a chunk
-                    chunk = sf_file.read(chunk_size)
-                    
-                    # Convert to float32 if needed
-                    if chunk.dtype != np.float32:
-                        chunk = chunk.astype(np.float32)
-                    
-                    # If stereo, convert to mono
-                    if len(chunk.shape) > 1 and chunk.shape[1] > 1:
-                        chunk = np.mean(chunk, axis=1)
-                    
-                    # Resample if needed
-                    if resampling_ratio != 1.0:
-                        chunk = librosa.resample(
-                            chunk, 
-                            orig_sr=sample_rate, 
-                            target_sr=target_sr
-                        )
-                    
-                    yield chunk
-                    
+            with wave.open(audio_path, "rb") as wav_file:
+                sample_rate = wav_file.getframerate()
+                sample_width = wav_file.getsampwidth()
+                channels = wav_file.getnchannels()
+                total_frames = wav_file.getnframes()
+                total_duration = total_frames / float(sample_rate)
+                chunk_size = int(chunk_duration * sample_rate)
+
+                dtype_map = {1: np.int8, 2: np.int16, 4: np.int32}
+                if sample_width not in dtype_map:
+                    raise ValueError(f"Unsupported WAV sample width: {sample_width}")
+
+                logger.info(f"Audio file: {total_duration:.1f} seconds at {sample_rate}Hz")
+                logger.info(f"Streaming in chunks of {chunk_duration:.1f} seconds")
+
+                while wav_file.tell() < total_frames:
+                    frames = wav_file.readframes(chunk_size)
+                    if not frames:
+                        break
+
+                    chunk = np.frombuffer(frames, dtype=dtype_map[sample_width]).astype(np.float32)
+                    scale = float(2 ** (8 * sample_width - 1))
+                    chunk = chunk / scale
+
+                    if channels > 1:
+                        chunk = chunk.reshape(-1, channels).mean(axis=1)
+
+                    yield _resample_audio(chunk, sample_rate, target_sr)
+
             logger.info(f"Finished streaming audio from {audio_path}")
             
         except Exception as e:
             logger.error(f"Error streaming audio: {e}")
-            raise 
+            raise

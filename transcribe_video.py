@@ -1,15 +1,16 @@
 import sys
-from src.transcriber import Transcriber, Config
+from src.config import Config
+from src.service import TranscriptionService
 import time
 import argparse
 import os
 
-def get_default_output_path(input_path, transcriber):
+def get_default_output_path(input_path, output_format):
     """Generate default output path based on input filename."""
     # Get the input filename without extension
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     # Create output path in transcripts directory with appropriate extension
-    return os.path.join("transcripts", f"{base_name}.{transcriber.output_format}")
+    return os.path.join("transcripts", f"{base_name}.{output_format}")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -28,20 +29,14 @@ def main():
     
     print("\nInitializing transcriber...")
     config = Config(".env")  # Explicitly load from .env file
-    transcriber = Transcriber(config)
+    service = TranscriptionService(config)
     
     # Set default output path if not specified
     if args.output is None:
-        args.output = get_default_output_path(args.input_path, transcriber)
+        args.output = get_default_output_path(args.input_path, config.output_format)
     
     print(f"\nProcessing {args.input_path}...")
-    segments = transcriber.transcribe(args.input_path)
-    
-    # Ensure the output directory exists
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    
-    print(f"\nSaving transcript to {args.output}...")
-    transcriber.save_transcript(segments, args.output)
+    service.transcribe_file(args.input_path, output_path=args.output)
     
     elapsed_time = time.time() - start_time
     print(f"\nDone! Transcript saved.")

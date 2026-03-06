@@ -2,6 +2,13 @@
 
 A Python tool for transcribing videos and audio files with speaker diarization. This tool processes video or audio files, transcribes the speech to text, and identifies different speakers in the conversation.
 
+## Current State
+
+- Core transcription flow is shared across CLI and server through `src/service.py`
+- Test suite is green on a fresh checkout: `91 passed`
+- A simple browser UI is available from the local model server for drag-and-drop uploads
+- Output files are written to `transcripts/`
+
 ## Features
 
 - Support for both video and audio files
@@ -105,7 +112,7 @@ The system supports different Whisper model sizes, each with its own trade-offs:
 
 Choose your model in the `.env` file:
 ```bash
-WHISPER_MODEL=base  # Options: tiny, base, small, medium, large-v3
+WHISPER_MODEL=large-v3-turbo  # Common options: tiny, base, small, medium, large-v3, large-v3-turbo
 ```
 
 ## Requirements
@@ -173,17 +180,32 @@ Edit the `.env` file to configure:
 
 ## Usage
 
-### Basic Usage
+### Recommended CLI
 
 Process a video file:
 ```bash
-python -m scripts.transcribe_video path/to/your/video.mp4
+python -m scripts.transcribe transcribe path/to/your/video.mp4
 ```
 
 Process an audio file (WAV files are processed directly):
 ```bash
-python -m scripts.transcribe_video path/to/your/audio.wav
+python -m scripts.transcribe transcribe path/to/your/audio.wav
 ```
+
+Disable diarization for a one-off run:
+```bash
+python -m scripts.transcribe transcribe path/to/your/audio.wav --no-diarize
+```
+
+### Web UI
+
+Start the local server:
+
+```bash
+python -m scripts.model_server
+```
+
+Then open `http://localhost:8000` in your browser and drag a file onto the page.
 
 ### Streaming Transcription (Low Memory Usage)
 
@@ -198,7 +220,7 @@ This processes the audio in chunks, significantly reducing memory usage.
 ### With Speaker Diarization
 
 ```bash
-python -m scripts.transcribe_video path/to/video.mp4 --diarize
+python -m scripts.transcribe transcribe path/to/video.mp4 --diarize
 ```
 
 Or with streaming:
@@ -210,13 +232,13 @@ python -m scripts.stream_transcribe path/to/video.mp4 --diarize
 ### Specify Output Format
 
 ```bash
-python -m scripts.transcribe_video path/to/video.mp4 --format srt
+python -m scripts.transcribe transcribe path/to/video.mp4 --format srt
 ```
 
 ### Specify Output Location
 
 ```bash
-python -m scripts.transcribe_video path/to/your/file.mp4 -o path/to/output.txt
+python -m scripts.transcribe transcribe path/to/your/file.mp4 -o path/to/output.txt
 ```
 
 ### Resume Partial Processing

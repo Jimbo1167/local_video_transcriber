@@ -42,7 +42,7 @@ class Config:
         self._output_format = output_format if output_format else "txt"
 
         # Parse diarization setting
-        diarization = os.getenv("INCLUDE_DIARIZATION", "true")
+        diarization = os.getenv("INCLUDE_DIARIZATION", "false")
         self.include_diarization = diarization.strip().lower() in ["true", "1", "yes", "on"]
 
         # Timeouts

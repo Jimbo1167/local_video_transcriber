@@ -34,7 +34,9 @@ class OutputFormatter:
         logger.info(f"Saving transcript in {self.format} format to {output_path}")
         
         # Create the output directory if it doesn't exist
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         
         try:
             if self.format == "txt":

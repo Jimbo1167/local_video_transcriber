@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Video Transcriber</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Local-first transcription</p>
+        <h1>Drop a file. Get a transcript.</h1>
+        <p class="lede">
+          Upload audio or video, run Whisper locally, and download the transcript
+          without leaving your machine.
+        </p>
+      </section>
+
+      <section class="panel">
+        <form id="upload-form" class="stack">
+          <label id="dropzone" class="dropzone" for="file-input">
+            <input id="file-input" name="file" type="file" accept="audio/*,video/*" hidden>
+            <span class="dropzone-title">Drag and drop audio or video here</span>
+            <span class="dropzone-subtitle">or click to choose a file</span>
+          </label>
+
+          <div class="controls">
+            <label>
+              <span>Format</span>
+              <select id="format" name="format">
+                <option value="txt">TXT</option>
+                <option value="srt">SRT</option>
+                <option value="vtt">VTT</option>
+                <option value="json">JSON</option>
+              </select>
+            </label>
+
+            <label class="checkbox">
+              <input id="diarize" name="diarize" type="checkbox">
+              <span>Speaker diarization</span>
+            </label>
+          </div>
+
+          <button id="submit-button" type="submit">Start transcription</button>
+        </form>
+
+        <div id="status-card" class="status-card muted">
+          <p id="status-text">Server idle.</p>
+        </div>
+
+        <section id="result" class="result hidden">
+          <div class="result-header">
+            <h2>Transcript</h2>
+            <a id="download-link" href="#" hidden>Download file</a>
+          </div>
+          <pre id="transcript-output"></pre>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

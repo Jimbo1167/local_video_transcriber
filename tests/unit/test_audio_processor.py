@@ -147,20 +147,23 @@ def test_extract_audio_timeout(mock_video_file_clip, audio_processor):
                     
                     mock_video_file_clip.assert_called_once_with("test.mp4")
 
-@patch("librosa.load")
-def test_load_audio(mock_librosa_load, audio_processor):
+def test_load_audio(audio_processor, tmp_path):
     """Test load_audio method."""
-    # Skip this test if librosa is not installed
-    pytest.importorskip("librosa")
-    
-    # Mock librosa.load
-    mock_librosa_load.return_value = (np.zeros(16000), 16000)
-    
-    # Test load_audio
-    audio = audio_processor.load_audio("test.wav")
-    
+    audio_path = tmp_path / "test.wav"
+
+    import wave
+
+    samples = np.zeros(16000, dtype=np.int16)
+    with wave.open(str(audio_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(samples.tobytes())
+
+    audio = audio_processor.load_audio(str(audio_path))
+
     assert isinstance(audio, np.ndarray)
-    mock_librosa_load.assert_called_once_with("test.wav", sr=16000, mono=True)
+    assert len(audio) == 16000
 
 def test_process_audio_stream(audio_processor):
     """Test process_audio_stream method."""

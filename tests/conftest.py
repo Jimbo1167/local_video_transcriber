@@ -19,6 +19,25 @@ from src.audio.processor import AudioProcessor
 from src.transcription.engine import TranscriptionEngine
 from src.diarization.engine import DiarizationEngine
 from src.output.formatter import OutputFormatter
+from tests.fixtures.generate_test_files import create_test_video, create_test_wav
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_test_media():
+    """Generate media fixtures on demand so a fresh checkout can run tests."""
+    fixtures_dir = Path(__file__).parent / "fixtures"
+    video_path = fixtures_dir / "test_video.mp4"
+    silent_video_path = fixtures_dir / "test_video_no_audio.mp4"
+    audio_path = fixtures_dir / "test_audio.wav"
+
+    fixtures_dir.mkdir(exist_ok=True)
+
+    if not video_path.exists():
+        create_test_video(str(video_path))
+    if not silent_video_path.exists():
+        create_test_video(str(silent_video_path), with_audio=False)
+    if not audio_path.exists():
+        create_test_wav(str(audio_path))
 
 @pytest.fixture
 def sample_audio():
