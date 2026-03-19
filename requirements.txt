@@ -3,7 +3,7 @@ proglog==0.1.10
 psutil==5.9.0
 faster-whisper>=1.1.0
 moviepy==1.0.3
-pyannote.audio>=4.0
+pyannote.audio>=3.3
 python-dotenv==1.0.1
 tqdm==4.66.2
 numpy>=1.24.0

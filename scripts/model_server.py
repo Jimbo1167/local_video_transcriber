@@ -228,6 +228,11 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
 
+        # Health check endpoint
+        if path == '/health':
+            self._send_json_response({"status": "ok"})
+            return
+
         # Handle status endpoint
         if path in ('/status', '/api/status'):
             # Calculate uptime
@@ -314,6 +319,21 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             # Handle JSON request (legacy)
             else:
                 self._handle_json_transcribe(content_length)
+
+        elif parsed_path.path == '/api/transcribe-sync':
+            content_type = self.headers.get('Content-Type', '')
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > MAX_UPLOAD_SIZE:
+                self._send_error(
+                    f"Upload too large ({content_length} bytes). Max: {MAX_UPLOAD_SIZE} bytes.",
+                    413
+                )
+                return
+            if not content_type.startswith('multipart/form-data'):
+                self._send_error("Expected multipart/form-data")
+                return
+            self._handle_sync_transcribe(content_type, content_length)
+
         else:
             self._send_error(f"Unknown endpoint: {parsed_path.path}", 404)
 
@@ -388,6 +408,54 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
                     os.unlink(temp_path)
                 except OSError:
                     logger.warning(f"Failed to clean up temp file: {temp_path}")
+
+    def _handle_sync_transcribe(self, content_type, content_length):
+        """Handle synchronous multipart file upload transcription."""
+        if content_length == 0:
+            self._send_error("Empty request body")
+            return
+
+        body = self.rfile.read(content_length)
+        fields = _parse_multipart(content_type, body)
+
+        if 'file' not in fields:
+            self._send_error("No file uploaded")
+            return
+
+        filename, file_data = fields['file']
+        if not file_data:
+            self._send_error("Empty file")
+            return
+
+        original_filename = os.path.basename(filename) if filename else "uploaded_file"
+
+        temp_path = None
+        try:
+            suffix = Path(original_filename).suffix or ".tmp"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_path = temp_file.name
+                temp_file.write(file_data)
+
+            _update_stats(requests=1)
+            logger.info("Sync transcription of uploaded file: %s", temp_path)
+
+            result = service.transcribe_existing_audio(temp_path)
+            segments = result.get("segments", [])
+            text = " ".join(seg[2] for seg in segments)
+
+            _update_stats(successful=1)
+            self._send_json_response({"text": text})
+
+        except Exception as e:
+            logger.error("Error in sync transcription: %s", str(e))
+            _update_stats(failed=1)
+            self._send_json_response({"error": str(e)}, status=500)
+        finally:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    logger.warning("Failed to clean up temp file: %s", temp_path)
 
     def _handle_json_transcribe(self, content_length):
         """Handle JSON-based transcription request."""
