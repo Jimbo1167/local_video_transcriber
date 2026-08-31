@@ -51,6 +51,13 @@ class Transcriber:
         self.audio_timeout = self.config.audio_timeout
         self.transcribe_timeout = self.config.transcribe_timeout
         self.diarize_timeout = self.config.diarize_timeout
+
+        # Error message from the most recent transcribe() call whose
+        # diarization post-step failed (None when it succeeded or was
+        # skipped). transcribe() is not thread-safe, so callers that
+        # serialize calls (e.g. TranscriptionService under its lock) can
+        # read this right after transcribe() returns.
+        self.last_diarization_error: Optional[str] = None
         
         # Log configuration
         logger.info("\nConfiguration loaded:")
@@ -148,6 +155,7 @@ class Transcriber:
             if include_diarization is None
             else include_diarization
         )
+        self.last_diarization_error = None
         audio_path = None
         needs_cleanup = False
 
@@ -215,9 +223,20 @@ class Transcriber:
                                 segment.text
                             ))
                     
-                    # Get diarization results
-                    diarization_segments = future_diarization.result()
-                    logger.info("Speaker diarization complete.")
+                    # Get diarization results. The transcription above is
+                    # already complete, so a failed diarization post-step must
+                    # not throw it away: degrade to an unlabeled transcript and
+                    # surface the error via last_diarization_error.
+                    try:
+                        diarization_segments = future_diarization.result()
+                        logger.info("Speaker diarization complete.")
+                    except Exception as e:
+                        self.last_diarization_error = str(e)
+                        diarization_segments = None
+                        logger.warning(
+                            "Diarization failed; returning transcription "
+                            "without speaker labels: %s", e
+                        )
                     
                     # Combine transcription with speaker information
                     logger.info("Combining transcription with speaker information...")

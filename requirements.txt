@@ -4,6 +4,10 @@ psutil==5.9.0
 faster-whisper>=1.1.0
 moviepy==1.0.3
 pyannote.audio>=4.0,<5
+# pyannote decodes audio via torchcodec, which must support the system FFmpeg
+# major version (0.16 ships loaders for FFmpeg 4-9). Older builds fail to
+# import against FFmpeg 9 and break diarization at runtime.
+torchcodec>=0.16,<1
 python-dotenv==1.0.1
 tqdm>=4.67.1,<5
 numpy>=1.24.0

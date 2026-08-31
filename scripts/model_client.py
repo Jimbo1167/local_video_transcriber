@@ -31,6 +31,23 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+def build_transcribe_options(args):
+    """Build the form fields for a transcription request.
+
+    The diarize field is always sent, so the server honors this request's
+    choice instead of falling back to its own INCLUDE_DIARIZATION default —
+    a client that didn't ask for diarization must never get (or fail on) it.
+    """
+    options = {'diarize': 'true' if args.diarize else 'false'}
+    if args.model:
+        options['model'] = args.model
+    if args.language:
+        options['language'] = args.language
+    if args.format:
+        options['format'] = args.format
+    return options
+
+
 def get_server_status(server_url):
     """Get the status of the model server."""
     try:
@@ -285,21 +302,15 @@ def main(argv=None):
             return 1
     
     elif args.command == "transcribe":
-        # Prepare options
-        options = {}
-        if args.model:
-            options['model'] = args.model
-        if args.language:
-            options['language'] = args.language
-        if args.diarize:
-            options['diarize'] = 'true'
-        if args.format:
-            options['format'] = args.format
-        
         # Send transcription request
-        result = transcribe_file(args.server, args.file_path, options)
-        
+        result = transcribe_file(args.server, args.file_path, build_transcribe_options(args))
+
         if result:
+            if result.get('diarization_error'):
+                logger.warning(
+                    "Diarization failed; transcript has no speaker labels: %s",
+                    result['diarization_error'],
+                )
             # Save to file if output path specified
             if args.output:
                 try:

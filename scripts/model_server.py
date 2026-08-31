@@ -169,6 +169,7 @@ def _run_transcription_job(
                 "processing_time": processing_time,
                 "output_file": output_path,
                 "download_url": f"/transcripts/{Path(output_path).name}",
+                "diarization_error": result.get("diarization_error"),
             },
         )
     except Exception as e:
@@ -432,7 +433,15 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
             _update_stats(requests=1)
             logger.info("Sync transcription of uploaded file: %s", temp_path)
 
-            result = service.transcribe_existing_audio(temp_path)
+            # Optional per-request override; absent keeps the server default.
+            include_diarization = None
+            if 'diarize' in fields:
+                _, diarize_value = fields['diarize']
+                include_diarization = diarize_value.lower() in ("true", "1", "yes", "on")
+
+            result = service.transcribe_existing_audio(
+                temp_path, include_diarization=include_diarization
+            )
             segments = result.get("segments", [])
             text = " ".join(seg[2] for seg in segments)
 
@@ -493,7 +502,8 @@ class ModelRequestHandler(BaseHTTPRequestHandler):
 
             self._send_json_response({
                 "segments": result["segments"],
-                "processing_time": processing_time
+                "processing_time": processing_time,
+                "diarization_error": result.get("diarization_error"),
             })
 
         except Exception as e:

@@ -14,6 +14,56 @@ from ..cache.manager import CacheManager
 
 logger = logging.getLogger(__name__)
 
+
+def _tiny_wav_bytes() -> bytes:
+    """A minimal valid mono 16-bit WAV (a few ms of silence) for probing."""
+    import io
+    import struct
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(struct.pack("<160h", *([0] * 160)))
+    return buffer.getvalue()
+
+
+def _check_torchcodec_available():
+    """Fail fast when pyannote's audio decoder cannot work on this machine.
+
+    pyannote-audio 4.x decodes audio through torchcodec's AudioDecoder, but
+    guards the import with a warning only — a broken torchcodec then surfaces
+    as ``NameError: name 'AudioDecoder' is not defined`` in the middle of a
+    job. torchcodec dlopens the system FFmpeg shared libraries and supports a
+    bounded range of FFmpeg major versions, so a system FFmpeg newer than the
+    installed torchcodec supports breaks the import.
+
+    Raises:
+        RuntimeError: with an actionable message when torchcodec's
+            AudioDecoder cannot be imported or cannot decode.
+    """
+    try:
+        from torchcodec.decoders import AudioDecoder
+
+        # torchcodec >= 0.12 imports fine even when the FFmpeg libraries
+        # can't be loaded and only fails on first decoder use, so probe
+        # with a real decode of a tiny in-memory WAV.
+        AudioDecoder(_tiny_wav_bytes())
+    except Exception as exc:
+        raise RuntimeError(
+            "Diarization is unavailable: torchcodec's AudioDecoder cannot be "
+            f"imported ({exc}). pyannote-audio decodes audio via torchcodec, "
+            "which loads the system FFmpeg shared libraries and only supports "
+            "a bounded range of FFmpeg major versions. Fix: install an FFmpeg "
+            "major version your torchcodec build supports (e.g. `brew install "
+            "ffmpeg@7`) or upgrade torchcodec to a build that supports your "
+            "FFmpeg, then verify with: python -c 'from torchcodec.decoders "
+            "import AudioDecoder'"
+        ) from exc
+
+
 class DiarizationEngine:
     """Handles speaker diarization for audio files."""
     
@@ -100,7 +150,11 @@ class DiarizationEngine:
             
         if not self.hf_token:
             logger.warning("HF_TOKEN is not set. Speaker diarization may not work properly.")
-            
+
+        # Probe before the (slow) pipeline load so a broken audio decoder
+        # fails here, at model-load time, not mid-job after transcription.
+        _check_torchcodec_available()
+
         try:
             logger.info(f"Loading diarization model: {self.diarization_model}")
             self.diarizer = Pipeline.from_pretrained(

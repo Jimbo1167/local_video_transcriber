@@ -156,13 +156,24 @@ def transcribe(input_path, output, diarize, model, language, output_format, prog
             jsonl_emitter.emit_error(str(exc))
         raise
 
+    diarization_error = result.get("diarization_error")
+
     if jsonl_emitter is not None:
-        jsonl_emitter.emit_completed(
+        completed_fields = dict(
             output=result.get("output_file", output),
             segments=len(result.get("segments", [])),
             processing_time=result.get("processing_time"),
         )
+        if diarization_error:
+            completed_fields["diarization_error"] = diarization_error
+        jsonl_emitter.emit_completed(**completed_fields)
         return
+
+    if diarization_error:
+        click.echo(click.style(
+            f"\nWarning: diarization failed; transcript has no speaker labels: {diarization_error}",
+            fg="yellow",
+        ))
 
     # Pretty-mode resource + timing summary (legacy behavior).
     metrics = monitor.get_average_metrics()
