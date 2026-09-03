@@ -74,6 +74,7 @@ class TranscriptionService:
                 progress_callback=progress_callback,
                 include_diarization=include_diarization,
             )
+            diarization_error = self.transcriber.last_diarization_error
 
         output_format = output_format or self.config.output_format
         output_path = output_path or self.build_output_path(input_path, output_format)
@@ -96,6 +97,9 @@ class TranscriptionService:
             "output_format": output_format,
             "output_file": output_path,
             "processing_time": time.time() - start_time,
+            # Set when diarization was requested but failed; the segments
+            # above are then the completed transcription without speakers.
+            "diarization_error": diarization_error,
         }
 
     def transcribe_existing_audio(
@@ -109,8 +113,10 @@ class TranscriptionService:
             segments = self.transcriber.transcribe(
                 audio_path, include_diarization=include_diarization
             )
+            diarization_error = self.transcriber.last_diarization_error
 
         return {
             "segments": segments,
             "processing_time": time.time() - start_time,
+            "diarization_error": diarization_error,
         }

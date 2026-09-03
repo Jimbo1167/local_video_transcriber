@@ -122,6 +122,12 @@ def try_server_transcribe(
         logger.warning(f"Model server request failed, falling back locally: {exc}")
         return None
 
+    if body.get("diarization_error"):
+        logger.warning(
+            "Server diarization failed; transcript has no speaker labels: %s",
+            body["diarization_error"],
+        )
+
     raw_segments = body.get("segments")
     if raw_segments is None:
         logger.warning(f"Model server returned no segments, falling back locally: {body.get('error')}")
